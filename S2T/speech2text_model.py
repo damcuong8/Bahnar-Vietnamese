@@ -1525,15 +1525,16 @@ class SeamlessM4Tv2ForSpeechToTextTrain_Pivot(nn.Module):
 
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToText.__init__ with SeamlessM4T->SeamlessM4Tv2
     def __init__(self, config: SeamlessM4Tv2Config):
-        super().__init__(config)
+        super().__init__()
+        self.config = config
 
         self.shared = nn.Embedding(config.vocab_size, config.hidden_size, config.pad_token_id)
         self.speech_encoder = SeamlessM4Tv2SpeechEncoder(config)
+        self.text_encoder = SeamlessM4Tv2Encoder(config, self.shared)  # Add text encoder for KD
         self.text_decoder = SeamlessM4Tv2Decoder(config, self.shared)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
-        # Initialize weights and apply final processing
-        self.post_init()
+        # No post_init needed for nn.Module (not PreTrainedModel)
 
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToText.get_encoder
     def get_encoder(self):
@@ -1557,7 +1558,135 @@ class SeamlessM4Tv2ForSpeechToTextTrain_Pivot(nn.Module):
             self._tie_or_clone_weights(self.text_decoder.embed_tokens, self.shared)
             self._tie_or_clone_weights(self.lm_head, self.shared)
 
-    @auto_docstring(custom_args=SEAMLESS_M4T_V2_COMMON_CUSTOM_ARGS)
+    def load_pretrained_weights(self, model_name_or_path: str, cache_dir: Optional[str] = None):
+        """
+        Load pretrained weights from HuggingFace model or local checkpoint.
+        
+        Args:
+            model_name_or_path: HuggingFace model name (e.g., "facebook/seamless-m4t-v2-large") 
+                               or path to local checkpoint
+            cache_dir: Directory to cache downloaded model (optional, for HF models)
+        
+        Returns:
+            Dict with loading statistics (missing_keys, unexpected_keys, etc.)
+        """
+        import os
+        
+        logger.info(f"Loading pretrained weights from {model_name_or_path}")
+        
+        # Check if it's a local path or HuggingFace model
+        if os.path.exists(model_name_or_path):
+            return self._load_from_local_checkpoint(model_name_or_path)
+        else:
+            return self._load_from_huggingface(model_name_or_path, cache_dir)
+    
+    def _load_from_huggingface(self, model_name: str, cache_dir: Optional[str] = None):
+        """Load weights from HuggingFace pretrained model"""
+        try:
+            from transformers import SeamlessM4Tv2Model
+        except ImportError:
+            raise ImportError(
+                "transformers library required to load HuggingFace models. "
+                "Install with: pip install transformers"
+            )
+        
+        logger.info(f"Downloading model from HuggingFace: {model_name}")
+        hf_model = SeamlessM4Tv2Model.from_pretrained(
+            model_name,
+            cache_dir=cache_dir
+        )
+        
+        stats = {
+            'speech_encoder': {'missing': [], 'unexpected': []},
+            'text_encoder': {'missing': [], 'unexpected': []},
+            'text_decoder': {'missing': [], 'unexpected': []},
+            'other': {'missing': [], 'unexpected': []}
+        }
+        
+        # Load speech encoder
+        logger.info("Loading speech_encoder weights...")
+        missing, unexpected = self.speech_encoder.load_state_dict(
+            hf_model.speech_encoder.state_dict(), 
+            strict=False
+        )
+        stats['speech_encoder']['missing'] = missing
+        stats['speech_encoder']['unexpected'] = unexpected
+        logger.info(f"✓ Speech encoder loaded ({len(missing)} missing, {len(unexpected)} unexpected)")
+        
+        # Load text encoder
+        logger.info("Loading text_encoder weights...")
+        missing, unexpected = self.text_encoder.load_state_dict(
+            hf_model.text_encoder.state_dict(), 
+            strict=False
+        )
+        stats['text_encoder']['missing'] = missing
+        stats['text_encoder']['unexpected'] = unexpected
+        logger.info(f"✓ Text encoder loaded ({len(missing)} missing, {len(unexpected)} unexpected)")
+        
+        # Load text decoder
+        logger.info("Loading text_decoder weights...")
+        missing, unexpected = self.text_decoder.load_state_dict(
+            hf_model.text_decoder.state_dict(), 
+            strict=False
+        )
+        stats['text_decoder']['missing'] = missing
+        stats['text_decoder']['unexpected'] = unexpected
+        logger.info(f"✓ Text decoder loaded ({len(missing)} missing, {len(unexpected)} unexpected)")
+        
+        # Load shared embeddings & LM head
+        logger.info("Loading shared embeddings and LM head...")
+        self.shared.load_state_dict(hf_model.shared.state_dict())
+        self.lm_head.weight.data = hf_model.lm_head.weight.data.clone()
+        logger.info("✓ Embeddings and LM head loaded")
+        
+        # Free memory
+        del hf_model
+        torch.cuda.empty_cache()
+        
+        logger.info("✓ All pretrained weights loaded successfully from HuggingFace!")
+        return stats
+    
+    def _load_from_local_checkpoint(self, checkpoint_path: str):
+        """Load weights from local checkpoint file"""
+        import os
+        
+        if not os.path.exists(checkpoint_path):
+            raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
+        
+        logger.info(f"Loading from local checkpoint: {checkpoint_path}")
+        
+        # Check if it's a directory or file
+        if os.path.isdir(checkpoint_path):
+            # Assume pytorch_model.bin inside directory
+            model_file = os.path.join(checkpoint_path, "pytorch_model.bin")
+            if not os.path.exists(model_file):
+                raise FileNotFoundError(
+                    f"pytorch_model.bin not found in {checkpoint_path}"
+                )
+        else:
+            model_file = checkpoint_path
+        
+        state_dict = torch.load(model_file, map_location='cpu')
+        
+        # Handle different checkpoint formats
+        if 'model' in state_dict:
+            # Training checkpoint format
+            state_dict = state_dict['model']
+        
+        # Load with strict=False to handle missing/extra keys
+        missing_keys, unexpected_keys = self.load_state_dict(state_dict, strict=False)
+        
+        logger.info(f"✓ Loaded from local checkpoint")
+        if missing_keys:
+            logger.warning(f"Missing keys ({len(missing_keys)}): {missing_keys[:5]}...")
+        if unexpected_keys:
+            logger.warning(f"Unexpected keys ({len(unexpected_keys)}): {unexpected_keys[:5]}...")
+        
+        return {
+            'missing_keys': missing_keys,
+            'unexpected_keys': unexpected_keys
+        }
+
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToText.forward
     def forward(
         self,

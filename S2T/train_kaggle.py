@@ -63,6 +63,7 @@ class TrainingConfig:
     # Model configuration
     model_name_or_path: str = "facebook/seamless-m4t-v2-large"
     is_pretrained: bool = False  # True if loading pretrained weights, False if from scratch
+    hf_cache_dir: Optional[str] = None  # Cache directory for HuggingFace models (auto-detect Kaggle if None)
     
     # Training hyperparameters
     num_epochs: int = 3
@@ -133,7 +134,7 @@ class TrainingConfig:
     
     # Distributed
     local_rank: int = -1
-    world_size: int = 1
+    world_size: int = 2
     
     def __post_init__(self):
         """Adjust learning rates based on pretrained flag"""
@@ -526,6 +527,40 @@ def create_model(config: TrainingConfig):
     logger.info("Initializing SeamlessM4Tv2ForSpeechToTextTrain_Pivot model")
     model = SeamlessM4Tv2ForSpeechToTextTrain_Pivot(model_config)
     
+    # Load pretrained weights if specified
+    if config.is_pretrained:
+        # Determine cache directory (Kaggle-friendly)
+        cache_dir = getattr(config, 'hf_cache_dir', None)
+        if cache_dir is None:
+            # Auto-detect Kaggle environment
+            import os
+            if os.path.exists('/kaggle'):
+                cache_dir = "/kaggle/working/hf_cache"
+                os.makedirs(cache_dir, exist_ok=True)
+        
+        # Use the new load_pretrained_weights method
+        try:
+            stats = model.load_pretrained_weights(
+                config.model_name_or_path,
+                cache_dir=cache_dir
+            )
+            logger.info("✓ Pretrained weights loaded successfully")
+            
+            # Log any issues (for debugging)
+            if hasattr(stats, 'get'):
+                for component, info in stats.items():
+                    if isinstance(info, dict):
+                        if info.get('missing'):
+                            logger.debug(f"{component} - Missing keys: {len(info['missing'])}")
+                        if info.get('unexpected'):
+                            logger.debug(f"{component} - Unexpected keys: {len(info['unexpected'])}")
+        except Exception as e:
+            logger.error(f"Failed to load pretrained weights: {e}")
+            logger.warning("Continuing with random initialization")
+            config.is_pretrained = False  # Update config to reflect actual state
+    else:
+        logger.info("Training from scratch (random initialization)")
+    
     # Enable gradient checkpointing if specified
     if config.gradient_checkpointing:
         logger.info("Enabling gradient checkpointing")
@@ -533,6 +568,8 @@ def create_model(config: TrainingConfig):
             model.speech_encoder.gradient_checkpointing_enable()
         if hasattr(model.text_decoder, 'gradient_checkpointing_enable'):
             model.text_decoder.gradient_checkpointing_enable()
+        if hasattr(model.text_encoder, 'gradient_checkpointing_enable'):
+            model.text_encoder.gradient_checkpointing_enable()
     
     return model, model_config
 
