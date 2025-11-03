@@ -946,7 +946,6 @@ class SeamlessM4Tv2DecoderLayer(GradientCheckpointingLayer):
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            cache_position=cache_position,
         )
         hidden_states = self.attn_dropout(hidden_states)
         hidden_states = residual + hidden_states
@@ -961,7 +960,6 @@ class SeamlessM4Tv2DecoderLayer(GradientCheckpointingLayer):
                 hidden_states=hidden_states,
                 encoder_hidden_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
-                cache_position=cache_position,
             )
             hidden_states = self.attn_dropout(hidden_states)
             hidden_states = residual + hidden_states
