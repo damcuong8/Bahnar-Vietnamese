@@ -190,7 +190,7 @@ def wrap_model_with_fsdp(
         sharding_strategy=sharding_strategy,
         auto_wrap_policy=auto_wrap_policy,
         mixed_precision=mixed_precision_policy,
-        backward_prefetch=BackwardPrefetch.BACKWARD_PRE,
+        backward_prefetch=None,
         cpu_offload=cpu_offload_config,
         device_id=torch.cuda.current_device(),
         limit_all_gathers=True,

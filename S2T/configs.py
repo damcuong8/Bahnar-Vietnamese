@@ -194,6 +194,7 @@ class FSDPConfig:
         from speech2text_model import (
             SeamlessM4Tv2ConformerEncoderLayer,
             SeamlessM4Tv2DecoderLayer,
+            SeamlessM4Tv2EncoderLayer,
         )
         
         from torch.distributed.fsdp.wrap import transformer_auto_wrap_policy
@@ -203,6 +204,7 @@ class FSDPConfig:
             transformer_layer_cls={
                 SeamlessM4Tv2ConformerEncoderLayer,
                 SeamlessM4Tv2DecoderLayer,
+                SeamlessM4Tv2EncoderLayer,
             },
         )
 
