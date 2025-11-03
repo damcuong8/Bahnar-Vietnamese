@@ -40,7 +40,7 @@ class TrainingConfig:
     audio_col: str = "source"
     vi_col: str = "Tiếng Việt"
     en_col: str = "Tiếng Anh"
-    
+
     # Curriculum Learning - Stage Configuration
     enable_curriculum: bool = True  # Enable 3-stage training
     

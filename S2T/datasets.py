@@ -7,7 +7,7 @@ import random
 import logging
 from typing import Optional, Dict, List, Any, Callable
 from dataclasses import dataclass
-
+import os
 import torch
 import torchaudio
 from torchaudio.transforms import Resample
@@ -58,6 +58,7 @@ class ViBaSpeechToTextDataset(Dataset):
         self.augment_fn = augment_fn
         self.use_cache = use_cache
         self.cache = {} if use_cache else None
+        self.prefix_audio_name = os.path.dirname(excel_path)
         
         logger.info(f"Loaded dataset with {len(self.df)} samples from {excel_path}")
         if use_cache:
@@ -126,6 +127,7 @@ class ViBaSpeechToTextDataset(Dataset):
         
         # Get audio source
         audio_source = str(row[self.audio_col]).strip()
+        audio_source = os.path.join(self.prefix_audio_name, audio_source)
         
         # Get text data
         vi_text = str(row[self.vi_col]) if not pd.isna(row[self.vi_col]) else ""
