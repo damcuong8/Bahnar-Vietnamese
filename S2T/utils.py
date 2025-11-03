@@ -76,11 +76,11 @@ def compute_token_kd_loss(
 ) -> Tuple[torch.Tensor, int]:
     """
     Compute token-level Knowledge Distillation (KL) loss between teacher logits
-    (text_pivot_logits) and student logits (audio_pivot_logits), aligned by labels.
+    (text_pivot_logits) and student logits (text_logits), aligned by labels.
     
     Args:
         text_pivot_logits: Teacher logits, shape (B, L, V).
-        audio_pivot_logits: Student logits, shape (B, L, V).
+        text_logits: Student logits, shape (B, L, V).
         labels: Target token ids, shape (B, L). Positions with value == ignore_index are masked out.
         tau: Temperature for softening distributions.
         ignore_index: Value in labels used to ignore positions (commonly -100).
@@ -91,24 +91,24 @@ def compute_token_kd_loss(
         n_valid_tokens: int, number of tokens used in the loss (for logging).
     """
     # Basic checks
-    assert text_pivot_logits.dim() == 3 and audio_pivot_logits.dim() == 3, "Logits must be (B,L,V)"
-    assert text_pivot_logits.shape == audio_pivot_logits.shape, "Teacher and student logits must have same shape"
+    assert text_pivot_logits.dim() == 3 and text_logits.dim() == 3, "Logits must be (B,L,V)"
+    assert text_pivot_logits.shape == text_logits.shape, "Teacher and student logits must have same shape"
     assert labels.dim() == 2, "Labels must be (B, L)"
-    B, L, V = audio_pivot_logits.shape
+    B, L, V = text_logits.shape
 
     # Create mask of valid positions (1 for valid tokens, 0 for ignored)
     device = labels.device
-    mask = (labels != ignore_index).to(dtype=audio_pivot_logits.dtype, device=device)  # (B, L)
+    mask = (labels != ignore_index).to(dtype=text_logits.dtype, device=device)  # (B, L)
     n_valid_tokens = int(mask.sum().item())
 
     # If no valid tokens, return zero loss
     if n_valid_tokens == 0:
-        return torch.tensor(0.0, device=device, dtype=audio_pivot_logits.dtype), 0
+        return torch.tensor(0.0, device=device, dtype=text_logits.dtype), 0
 
     # Compute softened distributions
     T = float(tau)
     # student: log-probs
-    student_log_prob = F.log_softmax(audio_pivot_logits / T, dim=-1)  # (B, L, V)
+    student_log_prob = F.log_softmax(text_logits / T, dim=-1)  # (B, L, V)
     # teacher: probs (detach so teacher not in grad graph)
     with torch.no_grad():
         teacher_prob = F.softmax(text_pivot_logits / T, dim=-1)       # (B, L, V)

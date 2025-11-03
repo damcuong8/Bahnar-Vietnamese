@@ -175,11 +175,32 @@ def test_data_loader():
     
     try:
         from torch.utils.data import DataLoader
-        from train_kaggle import DummySpeechToTextDataset, DataCollatorForSeamlessM4T
+        from datasets import DummySpeechToTextDataset, DataCollatorSpeechToText
+        from seamless_feature_extractor import SeamlessM4TFeatureExtractor
+        from transformers import AutoProcessor
         
         # Create dataset
         dataset = DummySpeechToTextDataset(num_samples=10)
-        collator = DataCollatorForSeamlessM4T(pad_token_id=0)
+        
+        # Create feature extractor and processor
+        feature_extractor = SeamlessM4TFeatureExtractor(
+            feature_size=80,
+            sampling_rate=16000,
+            num_mel_bins=80,
+            padding_value=0.0,
+            stride=2,
+        )
+        processor = AutoProcessor.from_pretrained("facebook/seamless-m4t-v2-large")
+        
+        # Create collator
+        collator = DataCollatorSpeechToText(
+            feature_extractor=feature_extractor,
+            processor=processor,
+            padding=True,
+            pad_to_multiple_of=8,
+            target_language="vi",
+            pivot_language="en"
+        )
         
         # Create dataloader
         dataloader = DataLoader(
@@ -304,6 +325,8 @@ def main():
         logger.info("🎉 All tests passed! You're ready to start training.")
         logger.info("\nTo start training with 2 GPUs, run:")
         logger.info("  torchrun --nproc_per_node=2 train_kaggle.py")
+        logger.info("\nOr use the refactored version:")
+        logger.info("  python train_kaggle.py  # (uses new modular structure)")
         return 0
     else:
         logger.warning("⚠️  Some tests failed. Please fix the issues before training.")
