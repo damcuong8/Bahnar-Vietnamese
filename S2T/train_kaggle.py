@@ -13,6 +13,7 @@ import numpy as np
 import torch
 import torch.distributed as dist
 from torch.utils.data import DataLoader
+import argparse
 
 # Import refactored modules
 from configs import TrainingConfig
@@ -43,6 +44,13 @@ try:
 except ImportError:
     WANDB_AVAILABLE = False
     print("Warning: wandb not installed. Install with: pip install wandb")
+
+# Optional YAML support for external config files
+try:
+    import yaml
+    YAML_AVAILABLE = True
+except ImportError:
+    YAML_AVAILABLE = False
 
 
 # Setup logging
@@ -302,5 +310,18 @@ def main(config: TrainingConfig | None = None):
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Train SeamlessM4T v2 with curriculum learning")
+    parser.add_argument("--config", type=str, default=None, help="Path to YAML config file")
+    args = parser.parse_args()
+
+    if args.config is not None:
+        if not YAML_AVAILABLE:
+            raise ImportError("pyyaml is required to load YAML configs. Install with: pip install pyyaml")
+        with open(args.config, "r", encoding="utf-8") as f:
+            cfg_dict = yaml.safe_load(f) or {}
+        # Build TrainingConfig from YAML dict (keys must match TrainingConfig fields)
+        config = TrainingConfig(**cfg_dict)
+        main(config)
+    else:
+        main()
 
