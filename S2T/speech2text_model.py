@@ -1515,7 +1515,7 @@ class SeamlessM4Tv2Decoder(SeamlessM4Tv2PreTrainedModel):
         return hidden_states
 
 
-class SeamlessM4Tv2ForSpeechToTextTrain_Pivot(nn.Module):
+class SeamlessM4Tv2ForSpeechToTextTrain_Pivot(PreTrainedModel, GenerationMixin):
     _keys_to_ignore_on_load_missing = ["text_encoder", "t2u_model", "vocoder"]
     main_input_name = "input_features"
 
