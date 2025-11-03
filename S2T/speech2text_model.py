@@ -740,7 +740,8 @@ class SeamlessM4Tv2Attention(nn.Module):
         hidden_states: torch.Tensor,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-    ) -> torch.Tensor:
+        output_attentions: bool = False,
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
 
         is_cross_attention = encoder_hidden_states is not None
@@ -757,12 +758,18 @@ class SeamlessM4Tv2Attention(nn.Module):
 
         # using torch sdpa
         sdpa_output = torch.nn.functional.scaled_dot_product_attention(
-            query_states, key_states, value_states, is_causal=self.is_causal, scale=self.scaling
+            query_states,
+            key_states,
+            value_states,
+            attn_mask=attention_mask,
+            dropout_p=self.dropout if self.training else 0.0,
+            is_causal=self.is_causal,
+            scale=self.scaling,
         )
         context_states = sdpa_output.permute(0, 2, 1, 3).contiguous().view(batch_size, seq_length, -1)
         attn_output = self.out_proj(context_states)
 
-        return attn_output
+        return attn_output, None
 
 
 # Copied from transformers.models.nllb_moe.modeling_nllb_moe.NllbMoeDenseActDense with NllbMoe->SeamlessM4Tv2,DenseActDense->FeedForwardNetwork, d_model->hidden_size
