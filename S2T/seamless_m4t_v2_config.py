@@ -394,16 +394,9 @@ class SeamlessM4Tv2Config():
         self.variance_predictor_kernel_size = variance_predictor_kernel_size
         self.var_pred_dropout = var_pred_dropout
         self.vocoder_offset = vocoder_offset
-
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            decoder_start_token_id=decoder_start_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            max_position_embeddings=max_position_embeddings,
-            **kwargs,
-        )
+        
+        # Store additional kwargs for compatibility
+        self._kwargs = kwargs
 
 
 __all__ = ["SeamlessM4Tv2Config"]

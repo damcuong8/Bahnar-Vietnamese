@@ -32,8 +32,10 @@ from scheduler_utils import create_cosine_scheduler, get_current_lr_multiplier
 from training_stages import setup_stage_a, setup_stage_b, setup_stage_c
 from checkpoint_utils import save_checkpoint
 from trainer import CurriculumTrainer
-from seamless_feature_extractor import SeamlessM4TFeatureExtractor
-from transformers import AutoProcessor
+from transformers import (
+    SeamlessM4TFeatureExtractor,
+    AutoProcessor,
+)
 
 # Check wandb availability
 try:

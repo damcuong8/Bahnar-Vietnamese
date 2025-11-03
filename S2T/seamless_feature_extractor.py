@@ -192,6 +192,7 @@ class SeamlessM4TFeatureExtractor:
 
         self.padding_side = "right"
         # Use torchaudio's mel scale for filter bank
+        # Note: torchaudio only supports "htk" or "slaney", using "slaney" as closest to kaldi
         self.mel_transform = torchaudio.transforms.MelSpectrogram(
             sample_rate=sampling_rate,
             n_fft=512,
@@ -202,7 +203,7 @@ class SeamlessM4TFeatureExtractor:
             f_max=sampling_rate // 2,
             power=2.0,
             norm=None,
-            mel_scale="kaldi",
+            mel_scale="slaney",  # Changed from "kaldi" to "slaney" (supported by torchaudio)
             center=False,
         )
 

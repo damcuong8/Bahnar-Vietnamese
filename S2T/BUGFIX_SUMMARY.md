@@ -1,7 +1,7 @@
 # 🐛 Bug Fixes Summary
 
 **Date**: 2025-11-03  
-**Status**: ✅ **FIXED**
+**Status**: ✅ **FIXED** (5 bugs total)
 
 ## Issues Found and Fixed
 
@@ -128,6 +128,78 @@ def compute_token_kd_loss(
 
 ---
 
+### 4. ❌ **TypeError in SeamlessM4Tv2Config**
+
+**Error:**
+```
+TypeError: object.__init__() takes exactly one argument (the instance to initialize)
+```
+
+**Root Cause:**
+`SeamlessM4Tv2Config` was calling `super().__init__()` with arguments, but it was inheriting from `object` (implicitly) which doesn't accept those arguments.
+
+**Location:** `seamless_m4t_v2_config.py:398`
+
+**Fix:**
+```python
+# Before (WRONG)
+class SeamlessM4Tv2Config():
+    def __init__(self, ...):
+        # ... set attributes ...
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            ...
+        )
+
+# After (CORRECT)
+class SeamlessM4Tv2Config():
+    def __init__(self, ...):
+        # ... set attributes ...
+        # Store additional kwargs for compatibility
+        self._kwargs = kwargs
+```
+
+**Status:** ✅ Fixed
+
+---
+
+### 5. ❌ **ValueError in SeamlessM4TFeatureExtractor**
+
+**Error:**
+```
+ValueError: mel_scale should be one of "htk" or "slaney".
+```
+
+**Root Cause:**
+The code was using `mel_scale="kaldi"` which is not supported by torchaudio. Torchaudio's MelSpectrogram only accepts `"htk"` or `"slaney"`.
+
+**Location:** `seamless_feature_extractor.py:205`
+
+**Fix:**
+```python
+# Before (WRONG)
+self.mel_transform = torchaudio.transforms.MelSpectrogram(
+    ...
+    mel_scale="kaldi",  # NOT SUPPORTED!
+    ...
+)
+
+# After (CORRECT)
+self.mel_transform = torchaudio.transforms.MelSpectrogram(
+    ...
+    mel_scale="slaney",  # Closest to kaldi, supported by torchaudio
+    ...
+)
+```
+
+**Note:** `"slaney"` is the closest equivalent to Kaldi's mel scale in torchaudio. If exact Kaldi compatibility is needed, consider using a custom implementation.
+
+**Status:** ✅ Fixed
+
+---
+
+
 ## Test Results After Fixes
 
 ### Before Fixes:
@@ -158,6 +230,8 @@ Results: 6/7 tests passed (GPU test skipped on CPU-only machines)
 | `speech2text_model.py` | Changed class to dataclass | 1 line |
 | `test_setup.py` | Updated imports and collator usage | ~40 lines |
 | `utils.py` | Fixed variable names | 8 lines |
+| `seamless_m4t_v2_config.py` | Removed invalid super().__init__() call | 9 lines |
+| `seamless_feature_extractor.py` | Changed mel_scale from "kaldi" to "slaney" | 2 lines |
 
 ---
 
@@ -230,6 +304,10 @@ Results: 7/7 tests passed
 2. **test_setup.py imports**: Test file wasn't updated after refactoring. It was still using old module structure.
 
 3. **compute_token_kd_loss**: Docstring mentioned `audio_pivot_logits` but parameter was named `text_logits`. Code was using the docstring name instead of actual parameter name.
+
+4. **SeamlessM4Tv2Config**: Attempting to call parent class initializer that doesn't exist or doesn't accept those parameters. The class was not properly inheriting from a configuration base class.
+
+5. **SeamlessM4TFeatureExtractor**: Using Kaldi-specific mel scale format which is not supported by torchaudio. This is a compatibility issue between different audio processing libraries.
 
 ### Prevention
 

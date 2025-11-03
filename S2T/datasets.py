@@ -15,7 +15,7 @@ import pandas as pd
 from torch.utils.data import Dataset
 from transformers import AutoProcessor
 
-from seamless_feature_extractor import SeamlessM4TFeatureExtractor
+from transformers import SeamlessM4TFeatureExtractor
 
 
 logger = logging.getLogger(__name__)
