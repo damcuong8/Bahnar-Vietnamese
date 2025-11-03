@@ -194,6 +194,7 @@ def wrap_model_with_fsdp(
         cpu_offload=cpu_offload_config,
         device_id=torch.cuda.current_device(),
         limit_all_gathers=True,
+        use_orig_params=True,
     )
     
     logger.info(f"✓ Model wrapped with FSDP")
