@@ -746,38 +746,11 @@ class SeamlessM4Tv2Attention(nn.Module):
         is_cross_attention = encoder_hidden_states is not None
         batch_size, seq_length = hidden_states.shape[:2]
 
-        is_updated = False
-        if past_key_values is not None:
-            if isinstance(past_key_values, EncoderDecoderCache):
-                is_updated = past_key_values.is_updated.get(self.layer_idx)
-                if is_cross_attention:
-                    # after the first generated id, we can subsequently re-use all key/value_states from cache
-                    curr_past_key_value = past_key_values.cross_attention_cache
-                else:
-                    curr_past_key_value = past_key_values.self_attention_cache
-            else:
-                curr_past_key_value = past_key_values
-
         current_states = encoder_hidden_states if is_cross_attention else hidden_states
-        if is_cross_attention and past_key_values is not None and is_updated:
-            # reuse k,v, cross_attentions
-            key_states = curr_past_key_value.layers[self.layer_idx].keys
-            value_states = curr_past_key_value.layers[self.layer_idx].values
-        else:
-            key_states = self.k_proj(current_states)
-            value_states = self.v_proj(current_states)
-            key_states = key_states.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
-            value_states = value_states.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
-
-            if past_key_values is not None:
-                # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = curr_past_key_value.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
-                # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
-                    past_key_values.is_updated[self.layer_idx] = True
+        key_states = self.k_proj(current_states)
+        value_states = self.v_proj(current_states)
+        key_states = key_states.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
 
         query_states = self.q_proj(hidden_states)
         query_states = query_states.reshape(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
@@ -1393,7 +1366,7 @@ class SeamlessM4Tv2Encoder(SeamlessM4Tv2PreTrainedModel):
                     attention_mask,
                 )
 
-                hidden_states = layer_outputs
+                hidden_states = layer_outputs[0]
 
         hidden_states = self.layer_norm(hidden_states)
 
@@ -1506,7 +1479,7 @@ class SeamlessM4Tv2Decoder(SeamlessM4Tv2PreTrainedModel):
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask=encoder_attention_mask,
             )
-            hidden_states = layer_outputs
+            hidden_states = layer_outputs[0]
 
         hidden_states = self.layer_norm(hidden_states)
 
