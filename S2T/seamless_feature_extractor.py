@@ -301,8 +301,8 @@ class SeamlessM4TFeatureExtractor:
             elif isinstance(raw_speech[0], torch.Tensor):
                 raw_speech = [tensor.float() for tensor in raw_speech]
 
-        # Check if input is batched
-        is_batched = isinstance(raw_speech, (list, tuple)) and len(raw_speech) > 0 and isinstance(raw_speech[0], (np.ndarray, list))
+        # Check if input is batched (including torch.Tensor support)
+        is_batched = isinstance(raw_speech, (list, tuple)) and len(raw_speech) > 0 and isinstance(raw_speech[0], (np.ndarray, list, torch.Tensor))
         
         # always return batch
         if not is_batched:

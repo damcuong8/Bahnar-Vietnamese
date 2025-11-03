@@ -14,7 +14,10 @@
 # limitations under the License.
 """SeamlessM4Tv2 model configuration"""
 
-class SeamlessM4Tv2Config():
+from transformers import PretrainedConfig
+
+
+class SeamlessM4Tv2Config(PretrainedConfig):
     r"""
     Args:
         vocab_size (`int`, *optional*, defaults to 256102):
@@ -309,6 +312,17 @@ class SeamlessM4Tv2Config():
         vocoder_offset=4,
         **kwargs,
     ):
+        # Call parent class constructor with relevant parameters
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            decoder_start_token_id=decoder_start_token_id,
+            is_encoder_decoder=is_encoder_decoder,
+            max_position_embeddings=max_position_embeddings,
+            **kwargs,
+        )
+        
         # overall_config
         self.vocab_size = vocab_size
         self.t2u_vocab_size = t2u_vocab_size
@@ -394,17 +408,6 @@ class SeamlessM4Tv2Config():
         self.variance_predictor_kernel_size = variance_predictor_kernel_size
         self.var_pred_dropout = var_pred_dropout
         self.vocoder_offset = vocoder_offset
-        
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.decoder_start_token_id = decoder_start_token_id
-        self.is_encoder_decoder = is_encoder_decoder
-        self.max_position_embeddings = max_position_embeddings
-        
-        # Store additional kwargs for compatibility
-        for key, value in kwargs.items():
-            setattr(self, key, value)
 
 
 __all__ = ["SeamlessM4Tv2Config"]

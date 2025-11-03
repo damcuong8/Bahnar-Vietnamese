@@ -1,5 +1,7 @@
 """
-Test script to verify that SeamlessM4T v2 FSDP training setup is working correctly.
+Test script to verify that SeamlessM4T v2 training setup is working correctly.
+Uses real training config and data for comprehensive testing.
+
 Run this before launching full training to catch any issues early.
 """
 
@@ -36,12 +38,16 @@ def test_imports():
         return False
     
     try:
+        from configs import TrainingConfig
         from speech2text_model import SeamlessM4Tv2ForSpeechToTextTrain_Pivot
         from seamless_m4t_v2_config import SeamlessM4Tv2Config
+        from datasets import ViBaSpeechToTextDataset, DataCollatorSpeechToText
         logger.info("✅ Local model modules imported successfully")
     except ImportError as e:
         logger.error(f"❌ Failed to import local modules: {e}")
         logger.error("Make sure you're in the S2T directory with all required files")
+        import traceback
+        traceback.print_exc()
         return False
     
     try:
@@ -76,6 +82,33 @@ def test_gpu_availability():
     return True
 
 
+def test_config_loading():
+    """Test loading training configuration"""
+    logger.info("\nTesting config loading...")
+    
+    try:
+        from configs import TrainingConfig
+        
+        config = TrainingConfig()
+        
+        logger.info(f"✅ Training config loaded successfully")
+        logger.info(f"  Excel path: {config.excel_path}")
+        logger.info(f"  Batch size: {config.per_device_train_batch_size}")
+        logger.info(f"  Gradient accumulation: {config.gradient_accumulation_steps}")
+        logger.info(f"  Epochs: {config.num_epochs}")
+        logger.info(f"  Encoder LR: {config.encoder_lr}")
+        logger.info(f"  Decoder LR: {config.decoder_lr}")
+        logger.info(f"  Curriculum enabled: {config.enable_curriculum}")
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to load config: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
 def test_model_creation():
     """Test that the model can be created and moved to GPU"""
     logger.info("\nTesting model creation...")
@@ -88,7 +121,11 @@ def test_model_creation():
         model = SeamlessM4Tv2ForSpeechToTextTrain_Pivot(config)
         
         num_params = sum(p.numel() for p in model.parameters())
-        logger.info(f"✅ Model created with {num_params / 1e6:.2f}M parameters")
+        trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        
+        logger.info(f"✅ Model created successfully")
+        logger.info(f"  Total parameters: {num_params / 1e6:.2f}M")
+        logger.info(f"  Trainable parameters: {trainable_params / 1e6:.2f}M")
         
         # Try to move to GPU
         if torch.cuda.is_available():
@@ -111,7 +148,7 @@ def test_model_creation():
 
 def test_forward_pass():
     """Test a forward pass with dummy data"""
-    logger.info("\nTesting forward pass...")
+    logger.info("\nTesting forward pass with dummy data...")
     
     try:
         from speech2text_model import SeamlessM4Tv2ForSpeechToTextTrain_Pivot
@@ -126,7 +163,7 @@ def test_forward_pass():
         else:
             device = "cpu"
         
-        # Create dummy inputs
+        # Create dummy inputs matching the real data format
         batch_size = 2
         audio_len = 100
         text_len = 20
@@ -169,91 +206,262 @@ def test_forward_pass():
         return False
 
 
-def test_data_loader():
-    """Test that data loader works correctly with synthetic data"""
-    logger.info("\nTesting data loader...")
+def test_dataset_loading():
+    """Test loading actual dataset from Excel file"""
+    logger.info("\nTesting dataset loading from Excel...")
     
     try:
-        import tempfile
-        import pandas as pd
-        import torchaudio
-        from torch.utils.data import DataLoader
-        from datasets import ViBaSpeechToTextDataset, DataCollatorSpeechToText
-        from seamless_feature_extractor import SeamlessM4TFeatureExtractor
+        from configs import TrainingConfig
+        from datasets import ViBaSpeechToTextDataset
         from transformers import AutoProcessor
         
-        # Create temporary directory for test audio files
-        with tempfile.TemporaryDirectory() as tmpdir:
-            # Create synthetic audio files and Excel data
-            test_data = []
-            for i in range(5):
-                # Generate synthetic audio (1 second of random audio)
-                audio_path = f"{tmpdir}/test_audio_{i}.wav"
-                waveform = torch.randn(1, 16000)  # 1 channel, 1 second at 16kHz
-                torchaudio.save(audio_path, waveform, 16000)
-                
-                test_data.append({
-                    "source": audio_path,
-                    "Tiếng Việt": f"Câu tiếng Việt số {i}",
-                    "Tiếng Anh": f"English sentence number {i}",
-                })
-            
-            # Create Excel file
-            excel_path = f"{tmpdir}/test_data.xlsx"
-            df = pd.DataFrame(test_data)
-            df.to_excel(excel_path, index=False)
-            
-            # Create dataset
-            dataset = ViBaSpeechToTextDataset(
-                excel_path=excel_path,
-                audio_col="source",
-                vi_col="Tiếng Việt",
-                en_col="Tiếng Anh",
-                target_sr=16000,
-                mono=True,
-            )
-            
-            # Create feature extractor and processor
-            feature_extractor = SeamlessM4TFeatureExtractor(
-                feature_size=80,
-                sampling_rate=16000,
-                num_mel_bins=80,
-                padding_value=0.0,
-                stride=2,
-            )
-            processor = AutoProcessor.from_pretrained("facebook/seamless-m4t-v2-large")
-            
-            # Create collator
-            collator = DataCollatorSpeechToText(
-                feature_extractor=feature_extractor,
-                processor=processor,
-                padding=True,
-                pad_to_multiple_of=8,
-                target_language="vi",
-                pivot_language="en"
-            )
-            
-            # Create dataloader
-            dataloader = DataLoader(
-                dataset,
-                batch_size=2,
-                collate_fn=collator,
-                num_workers=0,  # Use 0 for testing
-            )
-            
-            # Get one batch
-            batch = next(iter(dataloader))
-            
-            logger.info(f"✅ Data loader created successfully")
-            logger.info(f"  Batch keys: {list(batch.keys())}")
-            logger.info(f"  Audio shape: {batch['audio_input_features'].shape}")
-            logger.info(f"  Text shape: {batch['text_input_pivot_ids'].shape}")
-            logger.info(f"  Labels shape: {batch['labels'].shape}")
-            
+        config = TrainingConfig()
+        
+        # Check if Excel file exists
+        if not os.path.exists(config.excel_path):
+            logger.warning(f"⚠️  Excel file not found at {config.excel_path}")
+            logger.warning("  Please update config.excel_path or create synthetic data")
+            return True  # Don't fail the test, just warn
+        
+        logger.info(f"  Loading from: {config.excel_path}")
+        
+        # Load processor
+        processor = AutoProcessor.from_pretrained("facebook/seamless-m4t-v2-large")
+        
+        # Create dataset
+        dataset = ViBaSpeechToTextDataset(
+            excel_path=config.excel_path,
+            audio_col=config.audio_col,
+            vi_col=config.vi_col,
+            en_col=config.en_col,
+            target_sr=16000,
+            mono=True,
+            augment_fn=None,
+            use_cache=False,
+        )
+        
+        logger.info(f"✅ Dataset loaded successfully")
+        logger.info(f"  Total samples: {len(dataset)}")
+        
+        # Try to load one sample
+        try:
+            sample = dataset[0]
+            logger.info(f"  Sample keys: {list(sample.keys())}")
+            logger.info(f"  Waveform shape: {sample['waveform'].shape}")
+            logger.info(f"  VI text: {sample['raw_vi'][:50]}...")
+            if sample['raw_en']:
+                logger.info(f"  EN text: {sample['raw_en'][:50]}...")
+            logger.info("✅ Successfully loaded and processed one sample")
+        except Exception as e:
+            logger.error(f"❌ Failed to load sample: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Dataset loading failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
+def test_data_loader():
+    """Test data loader with real data using training config"""
+    logger.info("\nTesting data loader with real config...")
+    
+    try:
+        from configs import TrainingConfig
+        from torch.utils.data import DataLoader
+        from datasets import ViBaSpeechToTextDataset, DataCollatorSpeechToText
+        from transformers import SeamlessM4TFeatureExtractor, AutoProcessor
+        
+        config = TrainingConfig()
+        
+        # Check if Excel file exists
+        if not os.path.exists(config.excel_path):
+            logger.warning(f"⚠️  Excel file not found at {config.excel_path}")
+            logger.warning("  Skipping data loader test")
             return True
+        
+        # Create processor and feature extractor
+        processor = AutoProcessor.from_pretrained("facebook/seamless-m4t-v2-large")
+        
+        feature_extractor = SeamlessM4TFeatureExtractor(
+            feature_size=80,
+            sampling_rate=16000,
+            num_mel_bins=80,
+            padding_value=0.0,
+            stride=2,
+        )
+        
+        # Create dataset
+        dataset = ViBaSpeechToTextDataset(
+            excel_path=config.excel_path,
+            audio_col=config.audio_col,
+            vi_col=config.vi_col,
+            en_col=config.en_col,
+            target_sr=16000,
+            mono=True,
+            augment_fn=None,
+            use_cache=False,
+        )
+        
+        # Create collator
+        collator = DataCollatorSpeechToText(
+            feature_extractor=feature_extractor,
+            processor=processor,
+            padding=True,
+            pad_to_multiple_of=8,
+            target_language="vi",
+            pivot_language="en"
+        )
+        
+        # Create dataloader
+        dataloader = DataLoader(
+            dataset,
+            batch_size=config.per_device_train_batch_size,
+            shuffle=False,  # Don't shuffle for testing
+            collate_fn=collator,
+            num_workers=0,  # Use 0 for testing
+        )
+        
+        logger.info(f"✅ Data loader created successfully")
+        logger.info(f"  Batch size: {config.per_device_train_batch_size}")
+        logger.info(f"  Total batches: {len(dataloader)}")
+        
+        # Get one batch
+        batch = next(iter(dataloader))
+        
+        logger.info(f"  Batch keys: {list(batch.keys())}")
+        logger.info(f"  Audio features shape: {batch['audio_input_features'].shape}")
+        logger.info(f"  Audio mask shape: {batch['audio_attention_mask'].shape}")
+        logger.info(f"  Pivot text shape: {batch['text_input_pivot_ids'].shape}")
+        logger.info(f"  Pivot mask shape: {batch['text_pivot_attention_mask'].shape}")
+        logger.info(f"  Labels shape: {batch['labels'].shape}")
+        
+        logger.info("✅ Successfully created and loaded batch from real data")
+        
+        return True
         
     except Exception as e:
         logger.error(f"❌ Data loader test failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
+def test_training_loop():
+    """Test a mini training loop with real data"""
+    logger.info("\nTesting mini training loop...")
+    
+    try:
+        from configs import TrainingConfig
+        from torch.utils.data import DataLoader
+        from datasets import ViBaSpeechToTextDataset, DataCollatorSpeechToText
+        from transformers import SeamlessM4TFeatureExtractor, AutoProcessor
+        from speech2text_model import SeamlessM4Tv2ForSpeechToTextTrain_Pivot
+        from seamless_m4t_v2_config import SeamlessM4Tv2Config
+        
+        config = TrainingConfig()
+        
+        # Check if Excel file exists
+        if not os.path.exists(config.excel_path):
+            logger.warning(f"⚠️  Excel file not found - skipping training loop test")
+            return True
+        
+        # Create model
+        model_config = SeamlessM4Tv2Config()
+        model = SeamlessM4Tv2ForSpeechToTextTrain_Pivot(model_config)
+        
+        if torch.cuda.is_available():
+            model = model.cuda()
+        
+        # Create dataset and dataloader
+        processor = AutoProcessor.from_pretrained("facebook/seamless-m4t-v2-large")
+        
+        feature_extractor = SeamlessM4TFeatureExtractor(
+            feature_size=80,
+            sampling_rate=16000,
+            num_mel_bins=80,
+            padding_value=0.0,
+            stride=2,
+        )
+        
+        dataset = ViBaSpeechToTextDataset(
+            excel_path=config.excel_path,
+            audio_col=config.audio_col,
+            vi_col=config.vi_col,
+            en_col=config.en_col,
+            target_sr=16000,
+            mono=True,
+        )
+        
+        collator = DataCollatorSpeechToText(
+            feature_extractor=feature_extractor,
+            processor=processor,
+            padding=True,
+            pad_to_multiple_of=8,
+            target_language="vi",
+            pivot_language="en"
+        )
+        
+        dataloader = DataLoader(
+            dataset,
+            batch_size=1,  # Small batch for testing
+            shuffle=False,
+            collate_fn=collator,
+            num_workers=0,
+        )
+        
+        # Create optimizer
+        optimizer = torch.optim.AdamW(model.parameters(), lr=1e-5)
+        
+        # Run 2 training steps
+        model.train()
+        for i, batch in enumerate(dataloader):
+            if i >= 2:  # Only 2 steps
+                break
+            
+            # Move batch to device
+            if torch.cuda.is_available():
+                batch = {k: v.cuda() if isinstance(v, torch.Tensor) else v 
+                        for k, v in batch.items()}
+            
+            # Forward pass
+            outputs = model(
+                audio_input_features=batch['audio_input_features'],
+                text_input_pivot_ids=batch['text_input_pivot_ids'],
+                labels=batch['labels'],
+                audio_attention_mask=batch['audio_attention_mask'],
+                text_pivot_attention_mask=batch['text_pivot_attention_mask'],
+            )
+            
+            loss_ce, loss_kd = outputs[0], outputs[1]
+            
+            # Backward pass
+            total_loss = loss_ce + 0.5 * loss_kd if loss_kd is not None else loss_ce
+            total_loss.backward()
+            
+            # Optimizer step
+            optimizer.step()
+            optimizer.zero_grad()
+            
+            logger.info(f"  Step {i+1}: CE Loss={loss_ce.item():.4f}, "
+                       f"KD Loss={loss_kd.item() if loss_kd is not None else 'N/A'}")
+        
+        logger.info("✅ Mini training loop completed successfully")
+        
+        # Clean up
+        del model, optimizer
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Training loop test failed: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -267,6 +475,8 @@ def test_fsdp_wrapping():
     
     if num_gpus < 2:
         logger.warning("⚠️  Skipping FSDP test (requires 2+ GPUs)")
+        logger.info("  Run with torchrun for full FSDP testing:")
+        logger.info("  torchrun --nproc_per_node=2 train_kaggle.py")
         return True
     
     try:
@@ -276,7 +486,6 @@ def test_fsdp_wrapping():
         
         logger.info("✅ FSDP available and can be imported")
         logger.info("  Full FSDP test requires running with torchrun")
-        logger.info("  Run: torchrun --nproc_per_node=2 test_setup.py")
         
         return True
         
@@ -291,16 +500,21 @@ def test_disk_space():
     
     try:
         import shutil
+        from configs import TrainingConfig
         
-        stat = shutil.disk_usage(".")
+        config = TrainingConfig()
+        
+        stat = shutil.disk_usage(config.output_dir if os.path.exists(os.path.dirname(config.output_dir)) else ".")
         free_gb = stat.free / (1024**3)
         total_gb = stat.total / (1024**3)
         
         logger.info(f"  Total: {total_gb:.2f} GB")
         logger.info(f"  Free: {free_gb:.2f} GB")
+        logger.info(f"  Output directory: {config.output_dir}")
         
-        if free_gb < 5:
-            logger.warning("⚠️  Low disk space (< 5 GB)")
+        if free_gb < 10:
+            logger.warning("⚠️  Low disk space (< 10 GB)")
+            logger.warning("  Consider cleaning up or using a larger disk")
         else:
             logger.info("✅ Sufficient disk space")
         
@@ -314,15 +528,18 @@ def test_disk_space():
 def main():
     """Run all tests"""
     logger.info("="*70)
-    logger.info("SeamlessM4T v2 FSDP Training Setup Test")
+    logger.info("SeamlessM4T v2 Training Setup Test (Using Real Config & Data)")
     logger.info("="*70)
     
     tests = [
         ("Imports", test_imports),
         ("GPU Availability", test_gpu_availability),
+        ("Config Loading", test_config_loading),
         ("Model Creation", test_model_creation),
         ("Forward Pass", test_forward_pass),
+        ("Dataset Loading", test_dataset_loading),
         ("Data Loader", test_data_loader),
+        ("Mini Training Loop", test_training_loop),
         ("FSDP Wrapping", test_fsdp_wrapping),
         ("Disk Space", test_disk_space),
     ]
@@ -335,6 +552,8 @@ def main():
             results.append((test_name, result))
         except Exception as e:
             logger.error(f"❌ Test '{test_name}' crashed: {e}")
+            import traceback
+            traceback.print_exc()
             results.append((test_name, False))
     
     # Summary
@@ -354,10 +573,23 @@ def main():
     
     if passed == total:
         logger.info("🎉 All tests passed! You're ready to start training.")
-        logger.info("\nTo start training with 2 GPUs, run:")
+        logger.info("\n📋 Training Configuration Summary:")
+        try:
+            from configs import TrainingConfig
+            config = TrainingConfig()
+            logger.info(f"  - Excel: {config.excel_path}")
+            logger.info(f"  - Batch size: {config.per_device_train_batch_size}")
+            logger.info(f"  - Gradient accumulation: {config.gradient_accumulation_steps}")
+            logger.info(f"  - Effective batch size: {config.per_device_train_batch_size * config.gradient_accumulation_steps}")
+            logger.info(f"  - Epochs: {config.num_epochs}")
+            logger.info(f"  - Encoder LR: {config.encoder_lr}")
+            logger.info(f"  - Decoder LR: {config.decoder_lr}")
+        except:
+            pass
+        logger.info("\n🚀 To start training, run:")
+        logger.info("  python train_kaggle.py")
+        logger.info("\nOr with 2 GPUs:")
         logger.info("  torchrun --nproc_per_node=2 train_kaggle.py")
-        logger.info("\nOr use the refactored version:")
-        logger.info("  python train_kaggle.py  # (uses new modular structure)")
         return 0
     else:
         logger.warning("⚠️  Some tests failed. Please fix the issues before training.")
@@ -367,4 +599,3 @@ def main():
 if __name__ == "__main__":
     exit_code = main()
     sys.exit(exit_code)
-

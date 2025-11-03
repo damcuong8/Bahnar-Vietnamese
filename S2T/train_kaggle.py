@@ -94,6 +94,8 @@ def main():
     model, model_config = create_model(config)
     model = model.cuda()
     
+    processor = AutoProcessor.from_pretrained("facebook/seamless-m4t-v2-large") 
+    
     # Create datasets and dataloader
     logger.info("Creating datasets")
     train_dataset = ViBaSpeechToTextDataset(
@@ -105,8 +107,7 @@ def main():
         mono=True,
         augment_fn=None,
         use_cache=False,
-        max_audio_length=config.max_audio_length,
-        max_text_length=config.max_text_length,
+        processor=processor,
     )
 
     feature_extractor = SeamlessM4TFeatureExtractor(
@@ -115,8 +116,7 @@ def main():
         num_mel_bins=80,
         padding_value=0.0,
         stride=2,
-    )
-    processor = AutoProcessor.from_pretrained("facebook/seamless-m4t-v2-large") 
+    ) 
 
     data_collator = DataCollatorSpeechToText(
         feature_extractor=feature_extractor,
