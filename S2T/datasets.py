@@ -82,6 +82,7 @@ class ViBaSpeechToTextDataset(Dataset):
         # Convert to mono if needed
         if self.mono and waveform.shape[0] > 1:
             waveform = torch.mean(waveform, dim=0, keepdim=True)
+            waveform = waveform.squeeze(0)
 
         # Resample if needed
         if sr != self.target_sr:
@@ -89,16 +90,13 @@ class ViBaSpeechToTextDataset(Dataset):
             waveform = resampler(waveform)
             sr = self.target_sr
 
-        # Squeeze to 1D tensor
-        waveform = waveform.squeeze(0)
-
         # Apply augmentation if provided
         if self.augment_fn is not None:
             waveform = self.augment_fn(waveform, sr)
         
         return waveform
     
-    def _tokenize_text(self, text: str) -> tuple:
+    def _tokenize_text(self, text: str, language: str) -> tuple:
         """Tokenize text and return token IDs and attention mask"""
         if not text:
             return None, None
@@ -109,6 +107,7 @@ class ViBaSpeechToTextDataset(Dataset):
             padding=False,
             truncation=True,
             max_length=4096,
+            src_lang=language,
         )
         tokens = encoded["input_ids"].squeeze(0)  # Shape: [seq_len]
         attention_mask = encoded["attention_mask"].squeeze(0)  # Shape: [seq_len]
@@ -137,8 +136,8 @@ class ViBaSpeechToTextDataset(Dataset):
         waveform = self._process_audio(waveform, sr)
 
         # Tokenize texts
-        vi_tokens, vi_attention_mask = self._tokenize_text(vi_text)
-        en_tokens, en_attention_mask = self._tokenize_text(en_text)
+        vi_tokens, vi_attention_mask = self._tokenize_text(vi_text, "vie")
+        en_tokens, en_attention_mask = self._tokenize_text(en_text, "eng")
 
         result = {
             "waveform": waveform,
@@ -177,8 +176,8 @@ class DataCollatorSpeechToText:
     processor: AutoProcessor
     padding: bool = True
     pad_to_multiple_of: Optional[int] = 8
-    target_language: str = "vi"  # Vietnamese as target
-    pivot_language: str = "en"   # English as pivot/context
+    target_language: str = "vie"  # Vietnamese as target
+    pivot_language: str = "eng"   # English as pivot/context
     ignore_index: int = -100
     
     def _extract_audio_features(self, waveforms: List[torch.Tensor]) -> Dict[str, torch.Tensor]:
