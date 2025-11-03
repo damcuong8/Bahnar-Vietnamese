@@ -10,7 +10,6 @@ from .configs import TrainingConfig, FSDPConfig
 
 # Datasets and data processing
 from .datasets import (
-    DummySpeechToTextDataset,
     ViBaSpeechToTextDataset,
     DataCollatorSpeechToText,
 )
@@ -59,7 +58,6 @@ __all__ = [
     "FSDPConfig",
     
     # Datasets
-    "DummySpeechToTextDataset",
     "ViBaSpeechToTextDataset",
     "DataCollatorSpeechToText",
     

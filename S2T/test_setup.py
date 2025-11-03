@@ -170,56 +170,87 @@ def test_forward_pass():
 
 
 def test_data_loader():
-    """Test that data loader works correctly"""
+    """Test that data loader works correctly with synthetic data"""
     logger.info("\nTesting data loader...")
     
     try:
+        import tempfile
+        import pandas as pd
+        import torchaudio
         from torch.utils.data import DataLoader
-        from datasets import DummySpeechToTextDataset, DataCollatorSpeechToText
+        from datasets import ViBaSpeechToTextDataset, DataCollatorSpeechToText
         from seamless_feature_extractor import SeamlessM4TFeatureExtractor
         from transformers import AutoProcessor
         
-        # Create dataset
-        dataset = DummySpeechToTextDataset(num_samples=10)
-        
-        # Create feature extractor and processor
-        feature_extractor = SeamlessM4TFeatureExtractor(
-            feature_size=80,
-            sampling_rate=16000,
-            num_mel_bins=80,
-            padding_value=0.0,
-            stride=2,
-        )
-        processor = AutoProcessor.from_pretrained("facebook/seamless-m4t-v2-large")
-        
-        # Create collator
-        collator = DataCollatorSpeechToText(
-            feature_extractor=feature_extractor,
-            processor=processor,
-            padding=True,
-            pad_to_multiple_of=8,
-            target_language="vi",
-            pivot_language="en"
-        )
-        
-        # Create dataloader
-        dataloader = DataLoader(
-            dataset,
-            batch_size=2,
-            collate_fn=collator,
-            num_workers=0,  # Use 0 for testing
-        )
-        
-        # Get one batch
-        batch = next(iter(dataloader))
-        
-        logger.info(f"✅ Data loader created successfully")
-        logger.info(f"  Batch keys: {list(batch.keys())}")
-        logger.info(f"  Audio shape: {batch['audio_input_features'].shape}")
-        logger.info(f"  Text shape: {batch['text_input_pivot_ids'].shape}")
-        logger.info(f"  Labels shape: {batch['labels'].shape}")
-        
-        return True
+        # Create temporary directory for test audio files
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create synthetic audio files and Excel data
+            test_data = []
+            for i in range(5):
+                # Generate synthetic audio (1 second of random audio)
+                audio_path = f"{tmpdir}/test_audio_{i}.wav"
+                waveform = torch.randn(1, 16000)  # 1 channel, 1 second at 16kHz
+                torchaudio.save(audio_path, waveform, 16000)
+                
+                test_data.append({
+                    "source": audio_path,
+                    "Tiếng Việt": f"Câu tiếng Việt số {i}",
+                    "Tiếng Anh": f"English sentence number {i}",
+                })
+            
+            # Create Excel file
+            excel_path = f"{tmpdir}/test_data.xlsx"
+            df = pd.DataFrame(test_data)
+            df.to_excel(excel_path, index=False)
+            
+            # Create dataset
+            dataset = ViBaSpeechToTextDataset(
+                excel_path=excel_path,
+                audio_col="source",
+                vi_col="Tiếng Việt",
+                en_col="Tiếng Anh",
+                target_sr=16000,
+                mono=True,
+            )
+            
+            # Create feature extractor and processor
+            feature_extractor = SeamlessM4TFeatureExtractor(
+                feature_size=80,
+                sampling_rate=16000,
+                num_mel_bins=80,
+                padding_value=0.0,
+                stride=2,
+            )
+            processor = AutoProcessor.from_pretrained("facebook/seamless-m4t-v2-large")
+            
+            # Create collator
+            collator = DataCollatorSpeechToText(
+                feature_extractor=feature_extractor,
+                processor=processor,
+                padding=True,
+                pad_to_multiple_of=8,
+                target_language="vi",
+                pivot_language="en"
+            )
+            
+            # Create dataloader
+            dataloader = DataLoader(
+                dataset,
+                batch_size=2,
+                collate_fn=collator,
+                num_workers=0,  # Use 0 for testing
+            )
+            
+            # Get one batch
+            batch = next(iter(dataloader))
+            
+            logger.info(f"✅ Data loader created successfully")
+            logger.info(f"  Batch keys: {list(batch.keys())}")
+            logger.info(f"  Audio shape: {batch['audio_input_features'].shape}")
+            logger.info(f"  Text shape: {batch['text_input_pivot_ids'].shape}")
+            logger.info(f"  Labels shape: {batch['labels'].shape}")
+            
+            return True
         
     except Exception as e:
         logger.error(f"❌ Data loader test failed: {e}")

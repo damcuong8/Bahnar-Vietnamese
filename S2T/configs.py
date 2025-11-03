@@ -31,13 +31,15 @@ class TrainingConfig:
     per_device_eval_batch_size: int = 2
     gradient_accumulation_steps: int = 4
     max_grad_norm: float = 1.0
-    weight_decay: float = 0.00001
+    weight_decay: float = 0.0001
     
     # Data configuration
-    max_audio_length: int = 30  # seconds
-    max_text_length: int = 200  # tokens
-    num_train_samples: int = 1000  # Placeholder for dummy data
-    num_eval_samples: int = 100   # Placeholder for dummy data
+    max_audio_length: int = None  # seconds
+    max_text_length: int = None  # tokens
+    excel_path: str = "data/ViBa_S2T_train.xlsx"
+    audio_col: str = "source"
+    vi_col: str = "Tiếng Việt"
+    en_col: str = "Tiếng Anh"
     
     # Curriculum Learning - Stage Configuration
     enable_curriculum: bool = True  # Enable 3-stage training

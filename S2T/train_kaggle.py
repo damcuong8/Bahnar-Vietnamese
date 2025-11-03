@@ -17,7 +17,6 @@ from torch.utils.data import DataLoader
 # Import refactored modules
 from configs import TrainingConfig
 from datasets import (
-    DummySpeechToTextDataset,
     ViBaSpeechToTextDataset,
     DataCollatorSpeechToText
 )
@@ -97,8 +96,15 @@ def main():
     
     # Create datasets and dataloader
     logger.info("Creating datasets")
-    train_dataset = DummySpeechToTextDataset(
-        num_samples=config.num_train_samples,
+    train_dataset = ViBaSpeechToTextDataset(
+        excel_path=config.excel_path,
+        audio_col=config.audio_col,
+        vi_col=config.vi_col,
+        en_col=config.en_col,
+        target_sr=16000,
+        mono=True,
+        augment_fn=None,
+        use_cache=False,
         max_audio_length=config.max_audio_length,
         max_text_length=config.max_text_length,
     )
