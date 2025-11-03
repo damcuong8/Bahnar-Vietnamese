@@ -1527,7 +1527,7 @@ class SeamlessM4Tv2ForSpeechToTextTrain_Pivot(PreTrainedModel, GenerationMixin):
 
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToText.__init__ with SeamlessM4T->SeamlessM4Tv2
     def __init__(self, config: SeamlessM4Tv2Config):
-        super().__init__()
+        super().__init__(config)
         self.config = config
 
         self.shared = nn.Embedding(config.vocab_size, config.hidden_size, config.pad_token_id)
