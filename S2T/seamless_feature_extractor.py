@@ -261,7 +261,7 @@ class SeamlessM4TFeatureExtractor:
         self,
         raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
         padding: Union[bool, str, PaddingStrategy] = True,
-        pad_to_multiple_of: Optional[int] = 2,
+        pad_to_multiple_of: Optional[int] = 8,
         max_length: Optional[int] = None,
         truncation: bool = False,
         return_tensors: Optional[Union[str, TensorType]] = None,

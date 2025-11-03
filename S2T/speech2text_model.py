@@ -18,7 +18,7 @@ import copy
 import math
 import logging
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Optional, Union, Tuple
 
 import torch
 import torch.utils.checkpoint
@@ -40,6 +40,7 @@ from seamless_m4t_v2_config import SeamlessM4Tv2Config
 
 # Transformers
 from transformers import GenerationMixin, PreTrainedModel
+from transformers.modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
 
 
 logger = logging.getLogger(__name__)
@@ -446,7 +447,7 @@ class SeamlessM4Tv2ConformerEncoder(nn.Module):
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = torch.rand([])
 
-            skip_the_layer = self.training and dropout_probability < eslf.config.speech_encoder_layerdrop
+            skip_the_layer = self.training and dropout_probability < self.config.speech_encoder_layerdrop
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
                 layer_outputs = layer(
@@ -1718,7 +1719,7 @@ class SeamlessM4Tv2ForSpeechToTextTrain_Pivot(nn.Module):
 
         audio_encoder_attention_mask = audio_attention_mask
         if audio_attention_mask is not None:
-            sub_sampled_lengths = self._compute_sub_sample_lengths_from_attention_mask(attention_mask).to(
+            sub_sampled_lengths = self._compute_sub_sample_lengths_from_attention_mask(audio_attention_mask).to(
                 audio_encoder_outputs.device
             )
             audio_encoder_attention_mask = _compute_new_attention_mask(
@@ -1728,35 +1729,21 @@ class SeamlessM4Tv2ForSpeechToTextTrain_Pivot(nn.Module):
         # decoder for audio
         audio_decoder_outputs = self.text_decoder(
             input_ids=decoder_input_ids,
-            attention_mask=decoder_attention_mask,
             encoder_hidden_states=audio_encoder_outputs,
             encoder_attention_mask=audio_encoder_attention_mask,
-            past_key_values=past_key_values,
-            inputs_embeds=decoder_inputs_embeds,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
         with torch.no_grad():
             text_encoder_outputs = self.text_encoder(
                 input_ids=text_input_pivot_ids,
-                attention_mask=text_attention_mask,
+                attention_mask=text_pivot_attention_mask,
             )
         
             # decoder for text
             text_decoder_outputs = self.text_decoder(
                 input_ids=decoder_input_ids,
-                attention_mask=decoder_attention_mask,
                 encoder_hidden_states=text_encoder_outputs,
                 encoder_attention_mask=text_pivot_attention_mask,
-                past_key_values=past_key_values,
-                inputs_embeds=decoder_inputs_embeds,
-                use_cache=use_cache,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
             )
 
             text_pivot_logits = self.lm_head(text_decoder_outputs)
@@ -1871,7 +1858,8 @@ class SeamlessM4Tv2ForSpeechToTextTrain_Pivot(nn.Module):
                     )
                 # tgt_lang gets priority over decoder input ids
                 text_tgt_lang_id = self.generation_config.text_decoder_lang_to_code_id.get(tgt_lang)
-                text_decoder_input_ids = torch.tensor([[text_tgt_lang_id]] * batch_size, device=self.device)
+                device = input_features.device if input_features is not None else inputs.device
+                text_decoder_input_ids = torch.tensor([[text_tgt_lang_id]] * batch_size, device=device)
             else:
                 raise ValueError(
                     """This model generation config doesn't have a `text_decoder_lang_to_code_id` key which maps
