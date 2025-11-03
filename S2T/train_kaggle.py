@@ -63,13 +63,13 @@ def set_seed(seed: int):
     logger.info(f"Random seed set to {seed}")
 
 
-def main():
+def main(config: TrainingConfig | None = None):
     """Main training function with curriculum learning support"""
     
-    # Create config
-    config = TrainingConfig()
+    if config is None:
+        config = TrainingConfig()
     
-    # Setup distributed training
+    # Setup distribute  d training
     rank, world_size, local_rank = setup_distributed()
     config.local_rank = local_rank
     config.world_size = world_size

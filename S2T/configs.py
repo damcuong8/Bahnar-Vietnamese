@@ -22,16 +22,16 @@ class TrainingConfig:
     
     # Model configuration
     model_name_or_path: str = "facebook/seamless-m4t-v2-large"
-    is_pretrained: bool = False  # True if loading pretrained weights, False if from scratch
+    is_pretrained: bool = True  # True if loading pretrained weights, False if from scratch
     hf_cache_dir: Optional[str] = None  # Cache directory for HuggingFace models (auto-detect Kaggle if None)
     
     # Training hyperparameters
     num_epochs: int = 3
-    per_device_train_batch_size: int = 2
+    per_device_train_batch_size: int = 8
     per_device_eval_batch_size: int = 2
-    gradient_accumulation_steps: int = 4
+    gradient_accumulation_steps: int = 2
     max_grad_norm: float = 1.0
-    weight_decay: float = 0.0001
+    weight_decay: float = 0.0
     
     # Data configuration
     max_audio_length: int = None  # seconds
@@ -47,7 +47,7 @@ class TrainingConfig:
     # Stage A: Encoder-only (decoder frozen) - CRITICAL for low-resource speech
     stage_a_steps: Optional[int] = None  # Auto: max(5000, 0.05 * total_steps); recommend 0.4-0.6 for low-resource
     encoder_lr: float = 1e-4  # HIGH LR: Encoder needs to learn new language from scratch
-    stage_a_warmup_pct: float = 0.2  # 20% of stage A steps
+    stage_a_warmup_pct: float = 0.1 # 20% of stage A steps
     stage_a_warmup_min: int = 1000
     
     # Stage A auto-calculation constants
