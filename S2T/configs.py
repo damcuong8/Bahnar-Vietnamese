@@ -55,7 +55,9 @@ class TrainingConfig:
     stage_a_ratio: float = 0.5  # 50% of total steps
     
     # Stage B: Unfreeze top-k decoder layers (progressive, 6 rounds)
-    stage_b_steps: int = 10000  # Moderate training for adaptation
+    stage_b_steps: Optional[int] = None  # If None, compute from ratio below
+    min_stage_b_steps: int = 2000
+    stage_b_ratio: float = 0.3  # 30% of total steps
     num_stage_b_rounds: int = 6  # Number of rounds to progressively unfreeze
     unfreeze_top_k: int = 6  # Number of top decoder layers to unfreeze progressively
     decoder_lr: float = 1e-5  # LOW LR: ~10x lower than encoder to preserve Vietnamese knowledge
@@ -144,8 +146,11 @@ class TrainingConfig:
         else:
             stage_a_steps = self.stage_a_steps
         
-        # Stage B: use configured value
-        stage_b_steps = self.stage_b_steps
+        # Stage B: auto-calculate if not set
+        if self.stage_b_steps is None:
+            stage_b_steps = max(self.min_stage_b_steps, int(self.stage_b_ratio * total_training_steps))
+        else:
+            stage_b_steps = self.stage_b_steps
         
         # Stage C: remainder
         stage_c_steps = max(0, total_training_steps - stage_a_steps - stage_b_steps)

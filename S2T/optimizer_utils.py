@@ -339,7 +339,7 @@ def add_new_param_groups_to_optimizer(
     if stage == "C" and config.use_layer_wise_lr_decay:
         added_count = _add_layerwise_params(optimizer, model, config, new_params, current_lr_multiplier)
     else:
-        # Stage B or Stage C without layer-wise LR
+        # Stage B or Stage A without layer-wise LR
         added_count = _add_standard_params(optimizer, config, new_params, stage, current_lr_multiplier)
     
     logger.info(f"✓ Total new parameters added to optimizer: {added_count}")
