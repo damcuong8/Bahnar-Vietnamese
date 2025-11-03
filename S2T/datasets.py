@@ -48,7 +48,7 @@ class ViBaSpeechToTextDataset(Dataset):
         augment_fn: Optional[Callable[[torch.Tensor, int], torch.Tensor]] = None,
         use_cache: bool = False,
     ):
-        self.df = pd.read_excel(excel_path)
+        self.df = pd.read_csv(excel_path)
         self.processor = processor if processor is not None else AutoProcessor.from_pretrained("facebook/seamless-m4t-v2-large")
         self.audio_col = audio_col
         self.vi_col = vi_col
