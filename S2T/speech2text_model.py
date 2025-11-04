@@ -1440,6 +1440,7 @@ class SeamlessM4Tv2Decoder(SeamlessM4Tv2PreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> torch.Tensor:
         # retrieve input_ids
         if input_ids is not None:
@@ -1450,9 +1451,6 @@ class SeamlessM4Tv2Decoder(SeamlessM4Tv2PreTrainedModel):
             raise ValueError("You have to specify decoder_input_ids")
 
         inputs_embeds = self.embed_tokens(input_ids)
-
-        if self.gradient_checkpointing and self.training:
-            return self._gradient_checkpointing_func(partial(super().__call__, **kwargs), *args)
 
         attention_mask = _prepare_4d_causal_attention_mask(
             attention_mask, input_shape, inputs_embeds, 0
@@ -1600,6 +1598,10 @@ class SeamlessM4Tv2ForSpeechToTextTrain_Pivot(SeamlessM4Tv2PreTrainedModel, Gene
         )
         stats['speech_encoder']['missing'] = missing
         stats['speech_encoder']['unexpected'] = unexpected
+        if missing:
+            logger.warning(f"Missing keys in speech_encoder: {missing}")
+        if unexpected:
+            logger.warning(f"Unexpected keys in speech_encoder: {unexpected}")
         logger.info(f"✓ Speech encoder loaded ({len(missing)} missing, {len(unexpected)} unexpected)")
         
         # Load text encoder
@@ -1610,6 +1612,10 @@ class SeamlessM4Tv2ForSpeechToTextTrain_Pivot(SeamlessM4Tv2PreTrainedModel, Gene
         )
         stats['text_encoder']['missing'] = missing
         stats['text_encoder']['unexpected'] = unexpected
+        if missing:
+            logger.warning(f"Missing keys in text_encoder: {missing}")
+        if unexpected:
+            logger.warning(f"Unexpected keys in text_encoder: {unexpected}")
         logger.info(f"✓ Text encoder loaded ({len(missing)} missing, {len(unexpected)} unexpected)")
         
         # Load text decoder
@@ -1620,6 +1626,10 @@ class SeamlessM4Tv2ForSpeechToTextTrain_Pivot(SeamlessM4Tv2PreTrainedModel, Gene
         )
         stats['text_decoder']['missing'] = missing
         stats['text_decoder']['unexpected'] = unexpected
+        if missing:
+            logger.warning(f"Missing keys in text_decoder: {missing}")
+        if unexpected:
+            logger.warning(f"Unexpected keys in text_decoder: {unexpected}")
         logger.info(f"✓ Text decoder loaded ({len(missing)} missing, {len(unexpected)} unexpected)")
         
         # Load shared embeddings & LM head
