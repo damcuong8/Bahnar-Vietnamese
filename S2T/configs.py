@@ -27,9 +27,9 @@ class TrainingConfig:
     
     # Training hyperparameters
     num_epochs: int = 3
-    per_device_train_batch_size: int = 8
+    per_device_train_batch_size: int = 4  # ✅ Giảm từ 8 để tiết kiệm ~50% memory
     per_device_eval_batch_size: int = 2
-    gradient_accumulation_steps: int = 2
+    gradient_accumulation_steps: int = 4  # ✅ Tăng từ 2 để giữ effective batch size = 8
     max_grad_norm: float = 1.0
     weight_decay: float = 0.0
     
@@ -99,7 +99,7 @@ class TrainingConfig:
     wandb_save_checkpoints: bool = True  # Upload checkpoints to wandb as artifacts
     
     # Optimization
-    gradient_checkpointing: bool = False
+    gradient_checkpointing: bool = True  # ✅ BẬT để giảm 50-70% peak memory
     
     # Scheduler configuration
     min_warmup_steps: int = 200

@@ -1691,9 +1691,12 @@ class SeamlessM4Tv2ForSpeechToTextTrain_Pivot(SeamlessM4Tv2PreTrainedModel, Gene
                 labels, self.config.pad_token_id, self.config.decoder_start_token_id
             )
 
+        # ✅ Tắt output_hidden_states và output_attentions để tiết kiệm memory khi training
         audio_encoder_outputs = self.speech_encoder(
             input_features=audio_input_features,
             attention_mask=audio_attention_mask,
+            output_attentions=False,  # ✅ Không cần attention weights khi training
+            output_hidden_states=False,  # ✅ Không cần hidden states từ mọi layer
         )
 
         audio_encoder_attention_mask = audio_attention_mask
@@ -1711,11 +1714,18 @@ class SeamlessM4Tv2ForSpeechToTextTrain_Pivot(SeamlessM4Tv2PreTrainedModel, Gene
             encoder_hidden_states=audio_encoder_outputs,
             encoder_attention_mask=audio_encoder_attention_mask,
         )
+        
+        # ✅ Giải phóng audio_encoder_outputs sau khi decoder đã dùng (giảm memory peak)
+        # Lưu ý: audio_encoder_attention_mask vẫn cần dùng ở dưới, nhưng audio_encoder_outputs không cần nữa
+        del audio_encoder_outputs
 
         with torch.no_grad():
+            # ✅ Tắt output_hidden_states và output_attentions để tiết kiệm memory
             text_encoder_outputs = self.text_encoder(
                 input_ids=text_input_pivot_ids,
                 attention_mask=text_pivot_attention_mask,
+                output_attentions=False,  # ✅ Không cần attention weights
+                output_hidden_states=False,  # ✅ Không cần hidden states từ mọi layer
             )
         
             # decoder for text
@@ -1726,8 +1736,14 @@ class SeamlessM4Tv2ForSpeechToTextTrain_Pivot(SeamlessM4Tv2PreTrainedModel, Gene
             )
 
             text_pivot_logits = self.lm_head(text_decoder_outputs)
+            
+            # ✅ Giải phóng text encoder/decoder outputs sớm (no_grad block tự động giải phóng sau khi block kết thúc)
+            del text_encoder_outputs, text_decoder_outputs
 
         text_logits = self.lm_head(audio_decoder_outputs)
+        
+        # ✅ Giải phóng audio_decoder_outputs sau khi đã tính logits (giảm memory peak)
+        del audio_decoder_outputs
 
         kd_loss, n_valid_tokens = compute_token_kd_loss(text_pivot_logits, text_logits, labels)
 
