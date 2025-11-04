@@ -189,21 +189,21 @@ class SeamlessM4Tv2ConformerSelfAttention(nn.Module):
         key = key.transpose(1, 2)
         value = value.transpose(1, 2)
 
-        query_length, key_length = query.shape[2], key.shape[2]
+        attn_weights = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(self.head_size)
 
-        position_ids_l = torch.arange(query_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
-        position_ids_r = torch.arange(key_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
-        distance = position_ids_r - position_ids_l
-        distance = torch.clamp(distance, -self.left_max_position_embeddings, self.right_max_position_embeddings)
+        if self.position_embeddings_type == "relative_key":
+            query_length, key_length = query.shape[2], key.shape[2]
 
-        positional_embedding = self.distance_embedding(distance + self.left_max_position_embeddings)
-        positional_embedding = positional_embedding.to(dtype=query.dtype)  # fp16 compatibility
+            position_ids_l = torch.arange(query_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
+            position_ids_r = torch.arange(key_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
+            distance = position_ids_r - position_ids_l
+            distance = torch.clamp(distance, -self.left_max_position_embeddings, self.right_max_position_embeddings)
 
-        relative_position_attn_weights = torch.einsum("bhld,lrd->bhlr", query, positional_embedding)
+            positional_embedding = self.distance_embedding(distance + self.left_max_position_embeddings)
+            positional_embedding = positional_embedding.to(dtype=query.dtype)  # fp16 compatibility
 
-        attn_scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(self.head_size)
-        
-        attn_weights = attn_scores + (relative_position_attn_weights / math.sqrt(self.head_size))
+            relative_position_attn_weights = torch.einsum("bhld,lrd->bhlr", query, positional_embedding)
+            attn_weights = attn_weights + (relative_position_attn_weights / math.sqrt(self.head_size))
 
         # apply attention_mask if necessary
         if attention_mask is not None:
