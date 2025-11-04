@@ -18,6 +18,7 @@ import copy
 import math
 import logging
 from dataclasses import dataclass
+from functools import partial
 from typing import Optional, Union, Tuple
 
 import torch
@@ -1551,12 +1552,21 @@ class SeamlessM4Tv2ForSpeechToTextTrain_Pivot(SeamlessM4Tv2PreTrainedModel, Gene
         """
         import os
         
+        # Validate input
+        if not isinstance(model_name_or_path, (str, os.PathLike)):
+            raise TypeError(
+                f"model_name_or_path must be a string or path-like object, "
+                f"got {type(model_name_or_path).__name__}: {model_name_or_path}"
+            )
+        
         logger.info(f"Loading pretrained weights from {model_name_or_path}")
         
         # Check if it's a local path or HuggingFace model
-        if os.path.exists(model_name_or_path):
+        # Only check if it's a string path (not a HuggingFace model name)
+        if isinstance(model_name_or_path, str) and os.path.exists(model_name_or_path):
             return self._load_from_local_checkpoint(model_name_or_path)
         else:
+            # Treat as HuggingFace model name
             return self._load_from_huggingface(model_name_or_path, cache_dir)
     
     def _load_from_huggingface(self, model_name: str, cache_dir: Optional[str] = None):
@@ -1723,8 +1733,8 @@ class SeamlessM4Tv2ForSpeechToTextTrain_Pivot(SeamlessM4Tv2PreTrainedModel, Gene
             text_encoder_outputs = self.text_encoder(
                 input_ids=text_input_pivot_ids,
                 attention_mask=text_pivot_attention_mask,
-                output_attentions=False,  # ✅ Không cần attention weights
-                output_hidden_states=False,  # ✅ Không cần hidden states từ mọi layer
+                output_attentions=False,
+                output_hidden_states=False,
             )
         
             # decoder for text

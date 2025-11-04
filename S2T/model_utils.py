@@ -103,6 +103,29 @@ def create_model(config: TrainingConfig):
 
 def _load_pretrained_weights(model: nn.Module, config: TrainingConfig):
     """Load pretrained weights into model"""
+    # Validate model_name_or_path
+    if not hasattr(config, 'model_name_or_path'):
+        raise ValueError("config.model_name_or_path must be set to load pretrained weights")
+    
+    model_name_or_path = config.model_name_or_path
+    
+    # Check if it's a boolean (common mistake)
+    if isinstance(model_name_or_path, bool):
+        raise ValueError(
+            f"config.model_name_or_path must be a string, not a boolean. "
+            f"Got: {model_name_or_path}. "
+            f"Did you mean to set 'is_pretrained' instead?"
+        )
+    
+    if not isinstance(model_name_or_path, str):
+        raise TypeError(
+            f"config.model_name_or_path must be a string, "
+            f"got {type(model_name_or_path).__name__}: {model_name_or_path}"
+        )
+    
+    if not model_name_or_path:
+        raise ValueError("config.model_name_or_path cannot be empty")
+    
     # Determine cache directory (Kaggle-friendly)
     cache_dir = getattr(config, 'hf_cache_dir', None)
     if cache_dir is None:
@@ -111,8 +134,14 @@ def _load_pretrained_weights(model: nn.Module, config: TrainingConfig):
             cache_dir = "/kaggle/working/hf_cache"
             os.makedirs(cache_dir, exist_ok=True)
     
+    # Ensure cache_dir is None or a string (not boolean)
+    if cache_dir is not None and not isinstance(cache_dir, str):
+        logger.warning(f"Invalid cache_dir type: {type(cache_dir)}, setting to None")
+        cache_dir = None
+    
     # Use the new load_pretrained_weights method
     try:
+        logger.debug(f"Calling load_pretrained_weights with model_name_or_path={model_name_or_path}, cache_dir={cache_dir}")
         stats = model.load_pretrained_weights(
             config.model_name_or_path,
             cache_dir=cache_dir
