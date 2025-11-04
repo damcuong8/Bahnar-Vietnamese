@@ -84,12 +84,35 @@ def create_model(config: TrainingConfig):
     model = SeamlessM4Tv2ForSpeechToTextTrain_Pivot(model_config)
     log_memory_stats("After model creation", rank=rank)
     
+    # Extra CUDA memory diagnostics
+    if torch.cuda.is_available() and rank == 0:
+        try:
+            logger.info("CUDA memory summary after model creation:\n" + torch.cuda.memory_summary(device=torch.cuda.current_device()))
+        except Exception:
+            pass
+        try:
+            peak_gb = torch.cuda.max_memory_allocated(device=torch.cuda.current_device()) / 1024**3
+            logger.info(f"Peak max memory allocated after model creation: {peak_gb:.2f} GB")
+        except Exception:
+            pass
+    
     # Load pretrained weights if specified
     if config.is_pretrained:
         logger.info("Loading pretrained weights...")
         log_memory_stats("Before loading weights", rank=rank)
         _load_pretrained_weights(model, config)
         log_memory_stats("After loading weights", rank=rank)
+        # Extra CUDA memory diagnostics
+        if torch.cuda.is_available() and rank == 0:
+            try:
+                logger.info("CUDA memory summary after loading weights:\n" + torch.cuda.memory_summary(device=torch.cuda.current_device()))
+            except Exception:
+                pass
+            try:
+                peak_gb = torch.cuda.max_memory_allocated(device=torch.cuda.current_device()) / 1024**3
+                logger.info(f"Peak max memory allocated after loading weights: {peak_gb:.2f} GB")
+            except Exception:
+                pass
     else:
         logger.info("Training from scratch (random initialization)")
     
