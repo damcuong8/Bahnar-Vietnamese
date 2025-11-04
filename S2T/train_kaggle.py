@@ -54,11 +54,52 @@ except ImportError:
 
 
 # Setup logging
-logging.basicConfig(
-    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
-    datefmt="%m/%d/%Y %H:%M:%S",
-    level=logging.INFO,
-)
+def setup_logging(output_dir: str = "./output", rank: int = 0):
+    """
+    Setup logging to both console and file.
+    
+    Args:
+        output_dir: Directory to save log file
+        rank: Process rank (only rank 0 writes to file)
+    """
+    # Create output directory if it doesn't exist
+    if rank == 0:
+        os.makedirs(output_dir, exist_ok=True)
+        log_file = os.path.join(output_dir, "training.log")
+    else:
+        log_file = None
+    
+    # Configure root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+    
+    # Remove existing handlers to avoid duplicates
+    root_logger.handlers = []
+    
+    # Console handler (for all ranks)
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_formatter = logging.Formatter(
+        "%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+        datefmt="%m/%d/%Y %H:%M:%S"
+    )
+    console_handler.setFormatter(console_formatter)
+    root_logger.addHandler(console_handler)
+    
+    # File handler (only for rank 0)
+    if log_file and rank == 0:
+        file_handler = logging.FileHandler(log_file, mode='a', encoding='utf-8')
+        file_handler.setLevel(logging.INFO)
+        file_formatter = logging.Formatter(
+            "%(asctime)s - %(levelname)s - %(name)s - [Rank %(process)d] - %(message)s",
+            datefmt="%m/%d/%Y %H:%M:%S"
+        )
+        file_handler.setFormatter(file_formatter)
+        root_logger.addHandler(file_handler)
+        logger.info(f"Logging to file: {log_file}")
+    
+    return root_logger
+
 logger = logging.getLogger(__name__)
 
 
@@ -77,10 +118,13 @@ def main(config: TrainingConfig | None = None):
     if config is None:
         config = TrainingConfig()
     
-    # Setup distribute  d training
+    # Setup distributed training
     rank, world_size, local_rank = setup_distributed()
     config.local_rank = local_rank
     config.world_size = world_size
+    
+    # Setup logging (after getting rank)
+    setup_logging(output_dir=config.output_dir, rank=rank)
     
     # Set seed
     set_seed(config.seed)
