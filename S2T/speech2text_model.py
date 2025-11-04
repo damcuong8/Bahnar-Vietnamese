@@ -160,10 +160,11 @@ class SeamlessM4Tv2ConformerSelfAttention(nn.Module):
 
         self.dropout = nn.Dropout(p=config.speech_encoder_dropout)
 
-        self.left_max_position_embeddings = config.left_max_position_embeddings
-        self.right_max_position_embeddings = config.right_max_position_embeddings
-        num_positions = self.left_max_position_embeddings + self.right_max_position_embeddings + 1
-        self.distance_embedding = nn.Embedding(num_positions, self.head_size)
+        if self.position_embeddings_type == "relative_key":
+            self.left_max_position_embeddings = config.left_max_position_embeddings
+            self.right_max_position_embeddings = config.right_max_position_embeddings
+            num_positions = self.left_max_position_embeddings + self.right_max_position_embeddings + 1
+            self.distance_embedding = nn.Embedding(num_positions, self.head_size)
 
     def forward(
         self,

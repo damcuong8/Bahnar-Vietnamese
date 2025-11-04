@@ -14,6 +14,7 @@ from torch.distributed.fsdp import (
 )
 from functools import partial
 import torch
+import torch.nn as nn
 
 
 @dataclass
@@ -201,6 +202,7 @@ class FSDPConfig:
             SeamlessM4Tv2ConformerEncoderLayer,
             SeamlessM4Tv2DecoderLayer,
             SeamlessM4Tv2EncoderLayer,
+            SeamlessM4Tv2ScaledWordEmbedding,
         )
         
         from torch.distributed.fsdp.wrap import transformer_auto_wrap_policy
@@ -211,6 +213,7 @@ class FSDPConfig:
                 SeamlessM4Tv2ConformerEncoderLayer,
                 SeamlessM4Tv2DecoderLayer,
                 SeamlessM4Tv2EncoderLayer,
+                SeamlessM4Tv2ScaledWordEmbedding,  # shard token embeddings
             },
         )
 
