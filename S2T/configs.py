@@ -84,6 +84,12 @@ class TrainingConfig:
     # AMP configuration
     use_amp: bool = True  # Automatic Mixed Precision
     
+    # Torch.compile (PyTorch 2.x)
+    use_torch_compile: bool = False
+    torch_compile_backend: str = "inductor"  # typical: inductor
+    torch_compile_mode: str = "default"      # default | reduce-overhead | max-autotune
+    torch_compile_fullgraph: bool = False
+    
     # Checkpointing
     output_dir: str = "./output"
     save_steps: int = 1000

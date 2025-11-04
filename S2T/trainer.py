@@ -4,7 +4,9 @@ Extracted from train_kaggle.py for better modularity
 """
 
 import logging
+import time
 from typing import Optional
+from tqdm import tqdm
 
 import torch
 import torch.distributed as dist
@@ -230,6 +232,10 @@ class CurriculumTrainer:
         # Start memory tracking for this stage
         self.memory_tracker.start_tracking()
         
+        # Timing accumulators
+        last_log_time = time.time()
+        stage_start_time = last_log_time
+        pbar = tqdm(total=num_steps, desc=f"Stage {stage}", disable=self.rank != 0, dynamic_ncols=True)
         for step_in_stage in range(1, num_steps + 1):
             batch = self._get_next_batch()
             
@@ -247,6 +253,8 @@ class CurriculumTrainer:
             
             # Increment global step
             self.global_step += 1
+            if self.rank == 0:
+                pbar.update(1)
             
             # Periodic logging
             if step_in_stage % self.config.logging_steps == 0:
@@ -257,6 +265,12 @@ class CurriculumTrainer:
                     'kd_alpha': loss_dict['kd_alpha'],
                 }
                 self._log_metrics(avg_metrics, stage, step_in_stage)
+                if self.rank == 0:
+                    pbar.set_postfix({
+                        'loss': f"{avg_metrics['loss']:.4f}",
+                        'it/s': f"{avg_metrics['steps_per_sec']:.2f}",
+                        'ETA': avg_metrics['eta_str']
+                    })
                 
                 # Log memory summary periodically (every 10 logging steps)
                 if (step_in_stage // self.config.logging_steps) % 10 == 0:
@@ -280,6 +294,9 @@ class CurriculumTrainer:
                     scaler=self.scaler.state_dict() if self.scaler is not None else None,
                     stage=stage
                 )
+        
+        if self.rank == 0:
+            pbar.close()
         
         logger.info(f"✓ Completed Stage {stage} ({num_steps} steps)")
         

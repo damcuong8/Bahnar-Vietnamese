@@ -234,6 +234,9 @@ def main(config: TrainingConfig | None = None):
     # Wrap with FSDP after stage setup
     model = wrap_model_with_fsdp(model, config, model_config, rank)
     
+    # Wrap compile
+    model = torch.compile(model)
+    
     # Create optimizer and scheduler
     warmup_a = max(config.stage_a_warmup_min, int(config.stage_a_warmup_pct * stage_a_steps))
     optimizer = create_optimizer(model, config, stage="A")
