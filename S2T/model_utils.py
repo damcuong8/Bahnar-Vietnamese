@@ -19,6 +19,7 @@ from torch.distributed.fsdp import (
 from speech2text_model import SeamlessM4Tv2ForSpeechToTextTrain_Pivot
 from seamless_m4t_v2_config import SeamlessM4Tv2Config
 from configs import TrainingConfig, FSDPConfig
+from memory_tracker import log_memory_stats, print_memory_summary
 
 
 logger = logging.getLogger(__name__)
@@ -71,19 +72,31 @@ def create_model(config: TrainingConfig):
     # Create model config
     model_config = SeamlessM4Tv2Config()
     
+    # Get rank for logging (default to 0 if not set)
+    rank = getattr(config, 'local_rank', 0)
+    if 'RANK' in os.environ:
+        rank = int(os.environ['RANK'])
+    
     # Create model
     logger.info("Initializing SeamlessM4Tv2ForSpeechToTextTrain_Pivot model")
+    log_memory_stats("Before model creation", rank=rank)
+    
     model = SeamlessM4Tv2ForSpeechToTextTrain_Pivot(model_config)
+    log_memory_stats("After model creation", rank=rank)
     
     # Load pretrained weights if specified
     if config.is_pretrained:
+        logger.info("Loading pretrained weights...")
+        log_memory_stats("Before loading weights", rank=rank)
         _load_pretrained_weights(model, config)
+        log_memory_stats("After loading weights", rank=rank)
     else:
         logger.info("Training from scratch (random initialization)")
     
     # Enable gradient checkpointing if specified
     if config.gradient_checkpointing:
         _enable_gradient_checkpointing(model)
+        log_memory_stats("After enabling gradient checkpointing", rank=rank)
     
     return model, model_config
 
@@ -159,7 +172,13 @@ def wrap_model_with_fsdp(
         logger.info("FSDP not enabled or single GPU training, returning unwrapped model")
         return model
     
+    # Get rank for logging
+    rank = getattr(config, 'local_rank', 0)
+    if 'RANK' in os.environ:
+        rank = int(os.environ['RANK'])
+    
     logger.info("Wrapping model with FSDP")
+    log_memory_stats("Before FSDP wrap", rank=rank)
     
     # Get sharding strategy
     sharding_strategy = FSDPConfig.SHARDING_STRATEGIES.get(
@@ -198,5 +217,8 @@ def wrap_model_with_fsdp(
     )
     
     logger.info(f"✓ Model wrapped with FSDP")
+    log_memory_stats("After FSDP wrap", rank=rank)
+    print_memory_summary(rank=rank)
+    
     return model
 

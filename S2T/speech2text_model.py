@@ -33,13 +33,12 @@ from utils import (
     create_position_ids_from_input_ids,
     _compute_new_attention_mask,
     ACT2FN,
-    GradientCheckpointingLayer,
 )
 
 from seamless_m4t_v2_config import SeamlessM4Tv2Config
 
 # Transformers
-from transformers import GenerationMixin, PreTrainedModel
+from transformers import GenerationMixin, PreTrainedModel, GradientCheckpointingLayer
 from transformers.modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
 
 
