@@ -99,11 +99,8 @@ def compute_token_kd_loss(
     # Create mask of valid positions (1 for valid tokens, 0 for ignored)
     device = labels.device
     mask = (labels != ignore_index).to(dtype=text_logits.dtype, device=device)  # (B, L)
-    n_valid_tokens = int(mask.sum().item())
-
-    # If no valid tokens, return zero loss
-    if n_valid_tokens == 0:
-        return torch.tensor(0.0, device=device, dtype=text_logits.dtype), 0
+    # Keep as tensor to avoid graph breaks under torch.compile
+    n_valid_tokens_t = mask.sum()  # 0-dim tensor
 
     # Compute softened distributions
     T = float(tau)
@@ -127,14 +124,16 @@ def compute_token_kd_loss(
     kd_loss = kl_sum * (T * T)
 
     if reduction == "mean":
-        kd_loss = kd_loss / n_valid_tokens
+        # Safe divide without Python int conversion; clamp to avoid div-by-zero
+        kd_loss = kd_loss / n_valid_tokens_t.clamp_min(1)
     elif reduction == "sum":
         # already sum; keep as is
         pass
     else:
         raise ValueError(f"Unknown reduction: {reduction}")
 
-    return kd_loss, n_valid_tokens
+    # Return tensor for n_valid_tokens to preserve compile graph; callers can .item() for logging outside compiled regions
+    return kd_loss, n_valid_tokens_t
 
 
 

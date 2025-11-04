@@ -1583,6 +1583,71 @@ class SeamlessM4Tv2ForSpeechToTextTrain_Pivot(SeamlessM4Tv2PreTrainedModel, Gene
             cache_dir=cache_dir
         )
         
+        # Diagnostic: compare local vs checkpoint state dicts to explain missing keys (e.g., adapter/bias settings)
+        try:
+            local_sd = self.speech_encoder.state_dict()
+            ref_sd = hf_model.speech_encoder.state_dict()
+            local_keys = set(local_sd.keys())
+            ref_keys = set(ref_sd.keys())
+            missing_pre = sorted(k for k in (local_keys - ref_keys))
+            unexpected_pre = sorted(k for k in (ref_keys - local_keys))
+
+            # Detect adapter discrepancy
+            if any("adapter" in k for k in missing_pre):
+                if not getattr(hf_model.config, "add_adapter", False) and getattr(self.config, "add_adapter", False):
+                    logger.warning(
+                        "Checkpoint config has add_adapter=False while local config has add_adapter=True -> adapter params are missing in checkpoint."
+                    )
+
+            # Detect bias vs no-bias linear layers
+            bias_missing = [k for k in missing_pre if k.endswith(".bias")]
+            for k in bias_missing:
+                base = k[:-5]
+                if base + ".weight" in local_keys and base + ".weight" in ref_keys and k not in ref_keys:
+                    logger.warning_once(
+                        f"Missing bias '{k}' likely due to checkpoint layer saved without bias (bias=False)."
+                    )
+
+            # Detect adapter layer count mismatch
+            if getattr(self.config, "add_adapter", False) and hasattr(self.speech_encoder, "adapter") and self.speech_encoder.adapter is not None:
+                try:
+                    # Count local adapter layer indices
+                    import re
+                    local_adapter_idxs = set(
+                        int(m.group(1))
+                        for key in local_keys
+                        if (m := re.search(r"adapter\.layers\.(\d+)\.", key))
+                    )
+                    ref_adapter_idxs = set(
+                        int(m.group(1))
+                        for key in ref_keys
+                        if (m := re.search(r"adapter\.layers\.(\d+)\.", key))
+                    )
+                    if local_adapter_idxs and not ref_adapter_idxs:
+                        logger.warning(
+                            "Checkpoint has no adapter layers while local model expects them."
+                        )
+                    elif local_adapter_idxs != ref_adapter_idxs:
+                        logger.warning(
+                            f"Adapter layer indices differ (local={sorted(local_adapter_idxs)}, ckpt={sorted(ref_adapter_idxs)})."
+                        )
+                except Exception:
+                    pass
+
+            # Detect shape mismatches for overlapping keys
+            shape_mismatch = []
+            for k in (local_keys & ref_keys):
+                if local_sd[k].shape != ref_sd[k].shape:
+                    shape_mismatch.append((k, tuple(local_sd[k].shape), tuple(ref_sd[k].shape)))
+            if shape_mismatch:
+                logger.warning(
+                    f"Found {len(shape_mismatch)} parameter shape mismatches (showing first 3): "
+                    + ", ".join([f"{k}: local{ls} vs ckpt{rs}" for k, ls, rs in shape_mismatch[:3]])
+                )
+        except Exception:
+            # Diagnostics are best-effort; never fail loading due to this block
+            pass
+
         stats = {
             'speech_encoder': {'missing': [], 'unexpected': []},
             'text_encoder': {'missing': [], 'unexpected': []},
