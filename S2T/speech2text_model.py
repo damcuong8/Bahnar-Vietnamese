@@ -1581,7 +1581,10 @@ class SeamlessM4Tv2ForSpeechToTextTrain_Pivot(SeamlessM4Tv2PreTrainedModel, Gene
         logger.info(f"Downloading model from HuggingFace: {model_name}")
         hf_model = SeamlessM4Tv2Model.from_pretrained(
             model_name,
-            cache_dir=cache_dir
+            cache_dir=cache_dir,
+            device_map="auto",
+            low_cpu_mem_usage=True,
+            use_safetensors=True
         )
         
         # Diagnostic: compare local vs checkpoint state dicts to explain missing keys (e.g., adapter/bias settings)
@@ -1655,6 +1658,75 @@ class SeamlessM4Tv2ForSpeechToTextTrain_Pivot(SeamlessM4Tv2PreTrainedModel, Gene
             'text_decoder': {'missing': [], 'unexpected': []},
             'other': {'missing': [], 'unexpected': []}
         }
+        
+        # Helper function to count parameters
+        def count_parameters(module, module_name):
+            """Count and format parameters in a module"""
+            total_params = sum(p.numel() for p in module.parameters())
+            trainable_params = sum(p.numel() for p in module.parameters() if p.requires_grad)
+            
+            if total_params >= 1e9:
+                total_str = f"{total_params/1e9:.2f}B"
+            elif total_params >= 1e6:
+                total_str = f"{total_params/1e6:.2f}M"
+            elif total_params >= 1e3:
+                total_str = f"{total_params/1e3:.2f}K"
+            else:
+                total_str = str(total_params)
+            
+            if trainable_params >= 1e9:
+                trainable_str = f"{trainable_params/1e9:.2f}B"
+            elif trainable_params >= 1e6:
+                trainable_str = f"{trainable_params/1e6:.2f}M"
+            elif trainable_params >= 1e3:
+                trainable_str = f"{trainable_params/1e3:.2f}K"
+            else:
+                trainable_str = str(trainable_params)
+            
+            return total_params, trainable_params, total_str, trainable_str
+        
+        # Print parameter counts before loading
+        logger.info("=" * 70)
+        logger.info("MODULE PARAMETER COUNTS (BEFORE LOADING WEIGHTS)")
+        logger.info("=" * 70)
+        
+        # Local model parameters
+        speech_enc_total, speech_enc_train, speech_enc_total_str, speech_enc_train_str = count_parameters(
+            self.speech_encoder, "speech_encoder"
+        )
+        text_enc_total, text_enc_train, text_enc_total_str, text_enc_train_str = count_parameters(
+            self.text_encoder, "text_encoder"
+        )
+        text_dec_total, text_dec_train, text_dec_total_str, text_dec_train_str = count_parameters(
+            self.text_decoder, "text_decoder"
+        )
+        
+        logger.info(f"Local Model - speech_encoder: {speech_enc_total:,} params ({speech_enc_total_str}), "
+                   f"trainable: {speech_enc_train:,} ({speech_enc_train_str})")
+        logger.info(f"Local Model - text_encoder: {text_enc_total:,} params ({text_enc_total_str}), "
+                   f"trainable: {text_enc_train:,} ({text_enc_train_str})")
+        logger.info(f"Local Model - text_decoder: {text_dec_total:,} params ({text_dec_total_str}), "
+                   f"trainable: {text_dec_train:,} ({text_dec_train_str})")
+        
+        # HuggingFace model parameters
+        hf_speech_enc_total, hf_speech_enc_train, hf_speech_enc_total_str, hf_speech_enc_train_str = count_parameters(
+            hf_model.speech_encoder, "hf_speech_encoder"
+        )
+        hf_text_enc_total, hf_text_enc_train, hf_text_enc_total_str, hf_text_enc_train_str = count_parameters(
+            hf_model.text_encoder, "hf_text_encoder"
+        )
+        hf_text_dec_total, hf_text_dec_train, hf_text_dec_total_str, hf_text_dec_train_str = count_parameters(
+            hf_model.text_decoder, "hf_text_decoder"
+        )
+        
+        logger.info(f"HuggingFace Model - speech_encoder: {hf_speech_enc_total:,} params ({hf_speech_enc_total_str}), "
+                   f"trainable: {hf_speech_enc_train:,} ({hf_speech_enc_train_str})")
+        logger.info(f"HuggingFace Model - text_encoder: {hf_text_enc_total:,} params ({hf_text_enc_total_str}), "
+                   f"trainable: {hf_text_enc_train:,} ({hf_text_enc_train_str})")
+        logger.info(f"HuggingFace Model - text_decoder: {hf_text_dec_total:,} params ({hf_text_dec_total_str}), "
+                   f"trainable: {hf_text_dec_train:,} ({hf_text_dec_train_str})")
+        
+        logger.info("=" * 70)
         
         # Load speech encoder
         logger.info("Loading speech_encoder weights...")
@@ -1731,14 +1803,82 @@ class SeamlessM4Tv2ForSpeechToTextTrain_Pivot(SeamlessM4Tv2PreTrainedModel, Gene
         else:
             model_file = checkpoint_path
         
+        # Helper function to count parameters
+        def count_parameters(module, module_name):
+            """Count and format parameters in a module"""
+            total_params = sum(p.numel() for p in module.parameters())
+            trainable_params = sum(p.numel() for p in module.parameters() if p.requires_grad)
+            
+            if total_params >= 1e9:
+                total_str = f"{total_params/1e9:.2f}B"
+            elif total_params >= 1e6:
+                total_str = f"{total_params/1e6:.2f}M"
+            elif total_params >= 1e3:
+                total_str = f"{total_params/1e3:.2f}K"
+            else:
+                total_str = str(total_params)
+            
+            if trainable_params >= 1e9:
+                trainable_str = f"{trainable_params/1e9:.2f}B"
+            elif trainable_params >= 1e6:
+                trainable_str = f"{trainable_params/1e6:.2f}M"
+            elif trainable_params >= 1e3:
+                trainable_str = f"{trainable_params/1e3:.2f}K"
+            else:
+                trainable_str = str(trainable_params)
+            
+            return total_params, trainable_params, total_str, trainable_str
+        
+        # Print parameter counts before loading
+        logger.info("=" * 70)
+        logger.info("MODULE PARAMETER COUNTS (BEFORE LOADING FROM CHECKPOINT)")
+        logger.info("=" * 70)
+        
+        speech_enc_total, speech_enc_train, speech_enc_total_str, speech_enc_train_str = count_parameters(
+            self.speech_encoder, "speech_encoder"
+        )
+        text_enc_total, text_enc_train, text_enc_total_str, text_enc_train_str = count_parameters(
+            self.text_encoder, "text_encoder"
+        )
+        text_dec_total, text_dec_train, text_dec_total_str, text_dec_train_str = count_parameters(
+            self.text_decoder, "text_decoder"
+        )
+        
+        logger.info(f"Local Model - speech_encoder: {speech_enc_total:,} params ({speech_enc_total_str}), "
+                   f"trainable: {speech_enc_train:,} ({speech_enc_train_str})")
+        logger.info(f"Local Model - text_encoder: {text_enc_total:,} params ({text_enc_total_str}), "
+                   f"trainable: {text_enc_train:,} ({text_enc_train_str})")
+        logger.info(f"Local Model - text_decoder: {text_dec_total:,} params ({text_dec_total_str}), "
+                   f"trainable: {text_dec_train:,} ({text_dec_train_str})")
+        
+        # Count checkpoint parameters
+        logger.info(f"Loading checkpoint state_dict...")
         state_dict = torch.load(model_file, map_location='cpu')
         
         # Handle different checkpoint formats
         if 'model' in state_dict:
             # Training checkpoint format
-            state_dict = state_dict['model']
+            checkpoint_dict = state_dict['model']
+        else:
+            checkpoint_dict = state_dict
+        
+        # Count parameters in checkpoint
+        checkpoint_total_params = sum(p.numel() for p in checkpoint_dict.values() if isinstance(p, torch.Tensor))
+        if checkpoint_total_params >= 1e9:
+            checkpoint_str = f"{checkpoint_total_params/1e9:.2f}B"
+        elif checkpoint_total_params >= 1e6:
+            checkpoint_str = f"{checkpoint_total_params/1e6:.2f}M"
+        elif checkpoint_total_params >= 1e3:
+            checkpoint_str = f"{checkpoint_total_params/1e3:.2f}K"
+        else:
+            checkpoint_str = str(checkpoint_total_params)
+        
+        logger.info(f"Checkpoint - total parameters: {checkpoint_total_params:,} ({checkpoint_str})")
+        logger.info(f"Checkpoint - number of keys: {len(checkpoint_dict)}")
+        logger.info("=" * 70)
         
         # Load with strict=False to handle missing/extra keys
+        state_dict = checkpoint_dict
         missing_keys, unexpected_keys = self.load_state_dict(state_dict, strict=False)
         
         logger.info(f"✓ Loaded from local checkpoint")
