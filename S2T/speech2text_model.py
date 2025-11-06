@@ -673,7 +673,9 @@ class SeamlessM4Tv2SinusoidalPositionalEmbedding(nn.Module):
         if max_pos > self.weights.size(0):
             self.make_weights(max_pos + self.offset, self.embedding_dim, self.padding_idx)
 
-        return self.weights.index_select(0, position_ids.view(-1)).view(bsz, seq_len, self.weights.shape[-1]).detach()
+        # Ensure weights are on the same device as position_ids to avoid graph breaks with FSDP/torch.compile
+        weights = self.weights.to(position_ids.device)
+        return weights.index_select(0, position_ids.view(-1)).view(bsz, seq_len, weights.shape[-1]).detach()
 
     def create_position_ids_from_inputs_embeds(self, inputs_embeds, past_key_values_length):
         """
