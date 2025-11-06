@@ -1513,7 +1513,6 @@ class SeamlessM4Tv2ForSpeechToTextTrain_Pivot(SeamlessM4Tv2PreTrainedModel, Gene
         self.text_decoder = SeamlessM4Tv2Decoder(config, self.shared)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
-        # No post_init needed for nn.Module (not PreTrainedModel)
 
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToText.get_encoder
     def get_encoder(self):
