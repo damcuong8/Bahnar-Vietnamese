@@ -446,22 +446,13 @@ class SeamlessM4Tv2ConformerEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states.append(hidden_states)
 
-            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
-            dropout_probability = torch.rand([])
-
-            skip_the_layer = self.training and dropout_probability < self.config.speech_encoder_layerdrop
-            if not skip_the_layer or synced_gpus:
-                # under fsdp or deepspeed zero3 all gpus must run in sync
-                layer_outputs = layer(
-                    hidden_states,
-                    attention_mask=attention_mask,
-                    output_attentions=output_attentions,
-                    conv_attention_mask=conv_attention_mask,
-                )
-                hidden_states = layer_outputs[0]
-
-            if skip_the_layer:
-                layer_outputs = (None, None)
+            layer_outputs = layer(
+                hidden_states,
+                attention_mask=attention_mask,
+                output_attentions=output_attentions,
+                conv_attention_mask=conv_attention_mask,
+            )
+            hidden_states = layer_outputs[0]
 
             if output_attentions:
                 all_self_attentions.append(layer_outputs[1])
@@ -595,7 +586,7 @@ class SeamlessM4Tv2ConformerAdapter(nn.Module):
 
 
 ############ TEXT / UNITS related code ################
-
+    
 
 # Copied from transformers.models.m2m_100.modeling_m2m_100.M2M100ScaledWordEmbedding with M2M100->SeamlessM4Tv2
 class SeamlessM4Tv2ScaledWordEmbedding(nn.Embedding):
@@ -1361,22 +1352,13 @@ class SeamlessM4Tv2Encoder(SeamlessM4Tv2PreTrainedModel):
             attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
 
         for idx, encoder_layer in enumerate(self.layers):
-            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
-            to_drop = False
-            if self.training:
-                dropout_probability = torch.rand([])
-                if dropout_probability < self.layerdrop:  # skip the layer
-                    to_drop = True
+            
+            layer_outputs = encoder_layer(
+                hidden_states,
+                attention_mask,
+            )
 
-            if to_drop:
-                layer_outputs = (None, None)
-            else:
-                layer_outputs = encoder_layer(
-                    hidden_states,
-                    attention_mask,
-                )
-
-                hidden_states = layer_outputs[0]
+            hidden_states = layer_outputs[0]
 
         hidden_states = self.layer_norm(hidden_states)
 
@@ -1475,11 +1457,6 @@ class SeamlessM4Tv2Decoder(SeamlessM4Tv2PreTrainedModel):
 
         # decoder layers
         for idx, decoder_layer in enumerate(self.layers):
-            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
-            if self.training:
-                dropout_probability = torch.rand([])
-                if dropout_probability < self.layerdrop:
-                    continue
 
             layer_outputs = decoder_layer(
                 hidden_states,

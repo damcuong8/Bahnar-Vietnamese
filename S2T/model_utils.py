@@ -43,8 +43,8 @@ def setup_distributed():
         local_rank = 0
     
     if world_size > 1:
-        dist.init_process_group(backend="nccl")
         torch.cuda.set_device(local_rank)
+        dist.init_process_group(backend="nccl")
     
     logger.info(f"Distributed setup: rank={rank}, world_size={world_size}, local_rank={local_rank}")
     
@@ -173,17 +173,6 @@ def wrap_model_with_fsdp(
     if config.cpu_offload:
         logger.info("CPU offload enabled")
     
-    # Wrap model with FSDP
-    # Explicitly wrap large standalone modules we want sharded
-    try:
-        if hasattr(model, "shared") and isinstance(model.shared, nn.Embedding):
-            logger.info("Pre-wrapping shared embeddings with FSDP")
-            model.shared = FSDP.wrap(model.shared)
-        if hasattr(model, "lm_head") and isinstance(model.lm_head, nn.Linear):
-            logger.info("Pre-wrapping lm_head with FSDP")
-            model.lm_head = FSDP.wrap(model.lm_head)
-    except Exception as e:
-        logger.warning(f"Could not pre-wrap embeddings/head with FSDP: {e}")
 
     model = FSDP(
         model,

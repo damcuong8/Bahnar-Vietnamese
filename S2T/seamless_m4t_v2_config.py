@@ -48,10 +48,10 @@ class SeamlessM4Tv2Config(PretrainedConfig):
             this to something large just in case (e.g., 512 or 1024 or 2048).
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Whether the model is used as an encoder/decoder or not.
-        encoder_layerdrop (`float`, *optional*, defaults to 0.05):
+        encoder_layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the encoders. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
             for more details.
-        decoder_layerdrop (`float`, *optional*, defaults to 0.05):
+        decoder_layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the decoders. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
             for more details.
         activation_function (`str` or `function`, *optional*, defaults to `"relu"`):
@@ -107,7 +107,7 @@ class SeamlessM4Tv2Config(PretrainedConfig):
             The dropout probability for all layers in the speech encoder.
         add_adapter (`bool`, *optional*, defaults to `True`):
             Add an adapter layer on top of the speech encoder.
-        speech_encoder_layerdrop (`float`, *optional*, defaults to 0.1):
+        speech_encoder_layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the speech encoder. See the [LayerDrop paper](see
             https://huggingface.co/papers/1909.11556) for more details.
         feature_projection_input_dim (`int`, *optional*, defaults to 160):
