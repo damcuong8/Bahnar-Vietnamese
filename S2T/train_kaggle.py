@@ -230,9 +230,6 @@ def main(config: TrainingConfig | None = None):
     if config.world_size > 1:
         dist.barrier()
     
-    # Wrap compile
-    model = torch.compile(model)
-    
     # Wrap with FSDP after stage setup
     model = wrap_model_with_fsdp(model, config, model_config, rank)
     
