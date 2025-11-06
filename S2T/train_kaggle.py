@@ -144,7 +144,6 @@ def main(config: TrainingConfig | None = None):
     
     # Create model
     model, model_config = create_model(config)
-    model = model.cuda()
     
     processor = AutoProcessor.from_pretrained("facebook/seamless-m4t-v2-large") 
     
