@@ -213,7 +213,7 @@ class FSDPConfig:
                 SeamlessM4Tv2ConformerEncoderLayer,
                 SeamlessM4Tv2DecoderLayer,
                 SeamlessM4Tv2EncoderLayer,
-                SeamlessM4Tv2ScaledWordEmbedding,  # shard token embeddings
+                SeamlessM4Tv2ScaledWordEmbedding,
             },
         )
 

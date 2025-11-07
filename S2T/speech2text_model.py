@@ -1583,10 +1583,11 @@ class SeamlessM4Tv2ForSpeechToTextTrain_Pivot(SeamlessM4Tv2PreTrainedModel, Gene
                 encoder_attention_mask=text_pivot_attention_mask,
             )
 
-            # Compute logits and detach immediately to avoid FSDP issues
-            text_pivot_logits = self.lm_head(text_decoder_outputs).detach()
-
-        # ✅ Giải phóng sau khi ra khỏi no_grad block
+        # ✅ Tính logits BÊN NGOÀI no_grad block để tránh FSDP issues
+        # Clone và detach để tạo tensor độc lập, không liên kết với gradient graph
+        text_pivot_logits = self.lm_head(text_decoder_outputs).clone().detach()
+        
+        # ✅ Giải phóng sau khi đã tính logits
         del text_encoder_outputs, text_decoder_outputs
         
         text_logits = self.lm_head(audio_decoder_outputs)
