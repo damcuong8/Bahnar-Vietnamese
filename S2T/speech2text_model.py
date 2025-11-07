@@ -1518,57 +1518,10 @@ class SeamlessM4Tv2ForSpeechToTextTrain_Pivot(SeamlessM4Tv2PreTrainedModel, Gene
 
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToText._tie_weights
     def _tie_weights(self):
-        if self.config.tie_word_embeddings:
-            print(f"[DEBUG TIE_WEIGHTS] Before tying:")
-            print(f"  - shared.weight shape: {self.shared.weight.shape}")
-            print(f"  - text_decoder.embed_tokens.weight shape: {self.text_decoder.embed_tokens.weight.shape}")
-            print(f"  - lm_head.weight shape: {self.lm_head.weight.shape}")
-            print(f"  - lm_head.bias: {self.lm_head.bias}")
-            
-            # ✅ Check if FSDP has already flattened the weights
-            # If weights are 1D, FSDP has processed them and we cannot re-tie
-            if self.shared.weight.dim() == 1:
-                print(f"[DEBUG TIE_WEIGHTS] Weights are already FSDP-flattened, skipping tie operation")
-                print(f"  Note: Weight tying will be handled in _safe_lm_head_forward()")
-                return
-            
+        if self.config.tie_word_embeddings:         
             self._tie_or_clone_weights(self.text_decoder.embed_tokens, self.shared)
             self._tie_or_clone_weights(self.lm_head, self.shared)
-            
-            print(f"[DEBUG TIE_WEIGHTS] After tying:")
-            print(f"  - lm_head.weight shape: {self.lm_head.weight.shape}")
-            print(f"  - lm_head.bias: {self.lm_head.bias}")
-            print(f"  - Same object? text_decoder.embed_tokens.weight is shared.weight: {self.text_decoder.embed_tokens.weight is self.shared.weight}")
-            print(f"  - Same object? lm_head.weight is shared.weight: {self.lm_head.weight is self.shared.weight}")
 
-    def _safe_lm_head_forward(self, hidden_states):
-        """
-        Safely apply lm_head, handling FSDP weight flattening issues.
-        FSDP can flatten weights during sharding, so we need to reshape if necessary.
-        """
-        import torch.nn.functional as F
-        
-        weight = self.lm_head.weight
-        bias = self.lm_head.bias
-        
-        # Check if weight has been flattened by FSDP
-        expected_shape = (self.config.vocab_size, self.config.hidden_size)
-        
-        if weight.dim() == 1:
-            # Weight has been flattened by FSDP, reshape it
-            print(f"[DEBUG] lm_head.weight is flattened ({weight.shape}), reshaping to {expected_shape}")
-            weight = weight.view(expected_shape)
-        elif weight.shape != expected_shape:
-            # Weight has unexpected shape
-            print(f"[WARNING] lm_head.weight has unexpected shape {weight.shape}, expected {expected_shape}")
-            # Try to reshape if total elements match
-            if weight.numel() == expected_shape[0] * expected_shape[1]:
-                weight = weight.view(expected_shape)
-            else:
-                raise ValueError(f"Cannot reshape lm_head.weight from {weight.shape} to {expected_shape}")
-        
-        # Use F.linear directly with properly shaped weight
-        return F.linear(hidden_states, weight, bias)
 
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToText.forward
     def forward(
@@ -1636,39 +1589,39 @@ class SeamlessM4Tv2ForSpeechToTextTrain_Pivot(SeamlessM4Tv2PreTrainedModel, Gene
         # Lưu ý: audio_encoder_attention_mask vẫn cần dùng ở dưới, nhưng audio_encoder_outputs không cần nữa
         del audio_encoder_outputs
 
-    
-        # ✅ Tắt output_hidden_states và output_attentions để tiết kiệm memory
-        text_encoder_outputs = self.text_encoder(
-            input_ids=text_input_pivot_ids,
-            attention_mask=text_pivot_attention_mask,
-            output_attentions=False,
-            output_hidden_states=False,
-        )
-    
-        # decoder for text
-        text_decoder_outputs = self.text_decoder(
-            input_ids=decoder_input_ids,
-            encoder_hidden_states=text_encoder_outputs,
-            encoder_attention_mask=text_pivot_attention_mask,
-        )
-
-        # ✅ DEBUG: Kiểm tra shapes trước khi gọi lm_head
-        print(f"[DEBUG] text_decoder_outputs shape: {text_decoder_outputs.shape}")
-        print(f"[DEBUG] text_decoder_outputs dtype: {text_decoder_outputs.dtype}")
-        print(f"[DEBUG] lm_head weight shape: {self.lm_head.weight.shape}")
-        if hasattr(self.lm_head, 'bias') and self.lm_head.bias is not None:
-            print(f"[DEBUG] lm_head bias shape: {self.lm_head.bias.shape}")
-        else:
-            print(f"[DEBUG] lm_head has no bias")
+        with torch.no_grad():
+            # ✅ Tắt output_hidden_states và output_attentions để tiết kiệm memory
+            text_encoder_outputs = self.text_encoder(
+                input_ids=text_input_pivot_ids,
+                attention_mask=text_pivot_attention_mask,
+                output_attentions=False,
+                output_hidden_states=False,
+            )
         
-        # ✅ Use safe forward method to handle FSDP weight flattening
-        try:
-            text_pivot_logits = self._safe_lm_head_forward(text_decoder_outputs)
-            print(f"[DEBUG] text_pivot_logits shape: {text_pivot_logits.shape}")
-        except Exception as e:
-            print(f"[ERROR] Failed to compute text_pivot_logits: {e}")
-            print(f"[DEBUG] text_decoder_outputs details: shape={text_decoder_outputs.shape}, stride={text_decoder_outputs.stride()}")
-            raise
+            # decoder for text
+            text_decoder_outputs = self.text_decoder(
+                input_ids=decoder_input_ids,
+                encoder_hidden_states=text_encoder_outputs,
+                encoder_attention_mask=text_pivot_attention_mask,
+            )
+
+            # ✅ DEBUG: Kiểm tra shapes trước khi gọi lm_head
+            print(f"[DEBUG] text_decoder_outputs shape: {text_decoder_outputs.shape}")
+            print(f"[DEBUG] text_decoder_outputs dtype: {text_decoder_outputs.dtype}")
+            print(f"[DEBUG] lm_head weight shape: {self.lm_head.weight.shape}")
+            if hasattr(self.lm_head, 'bias') and self.lm_head.bias is not None:
+                print(f"[DEBUG] lm_head bias shape: {self.lm_head.bias.shape}")
+            else:
+                print(f"[DEBUG] lm_head has no bias")
+            
+            # ✅ Use safe forward method to handle FSDP weight flattening
+            try:
+                text_pivot_logits = self.lm_head(text_decoder_outputs)
+                print(f"[DEBUG] text_pivot_logits shape: {text_pivot_logits.shape}")
+            except Exception as e:
+                print(f"[ERROR] Failed to compute text_pivot_logits: {e}")
+                print(f"[DEBUG] text_decoder_outputs details: shape={text_decoder_outputs.shape}, stride={text_decoder_outputs.stride()}")
+                raise
         
         # ✅ Giải phóng sau khi đã tính logits
         del text_encoder_outputs, text_decoder_outputs
