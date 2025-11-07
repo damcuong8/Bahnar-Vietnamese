@@ -1525,6 +1525,13 @@ class SeamlessM4Tv2ForSpeechToTextTrain_Pivot(SeamlessM4Tv2PreTrainedModel, Gene
             print(f"  - lm_head.weight shape: {self.lm_head.weight.shape}")
             print(f"  - lm_head.bias: {self.lm_head.bias}")
             
+            # ✅ Check if FSDP has already flattened the weights
+            # If weights are 1D, FSDP has processed them and we cannot re-tie
+            if self.shared.weight.dim() == 1:
+                print(f"[DEBUG TIE_WEIGHTS] Weights are already FSDP-flattened, skipping tie operation")
+                print(f"  Note: Weight tying will be handled in _safe_lm_head_forward()")
+                return
+            
             self._tie_or_clone_weights(self.text_decoder.embed_tokens, self.shared)
             self._tie_or_clone_weights(self.lm_head, self.shared)
             
@@ -1539,18 +1546,28 @@ class SeamlessM4Tv2ForSpeechToTextTrain_Pivot(SeamlessM4Tv2PreTrainedModel, Gene
         Safely apply lm_head, handling FSDP weight flattening issues.
         FSDP can flatten weights during sharding, so we need to reshape if necessary.
         """
+        import torch.nn.functional as F
+        
         weight = self.lm_head.weight
         bias = self.lm_head.bias
         
         # Check if weight has been flattened by FSDP
         expected_shape = (self.config.vocab_size, self.config.hidden_size)
+        
         if weight.dim() == 1:
-            # Weight has been flattened, reshape it
+            # Weight has been flattened by FSDP, reshape it
             print(f"[DEBUG] lm_head.weight is flattened ({weight.shape}), reshaping to {expected_shape}")
             weight = weight.view(expected_shape)
+        elif weight.shape != expected_shape:
+            # Weight has unexpected shape
+            print(f"[WARNING] lm_head.weight has unexpected shape {weight.shape}, expected {expected_shape}")
+            # Try to reshape if total elements match
+            if weight.numel() == expected_shape[0] * expected_shape[1]:
+                weight = weight.view(expected_shape)
+            else:
+                raise ValueError(f"Cannot reshape lm_head.weight from {weight.shape} to {expected_shape}")
         
         # Use F.linear directly with properly shaped weight
-        import torch.nn.functional as F
         return F.linear(hidden_states, weight, bias)
 
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToText.forward
