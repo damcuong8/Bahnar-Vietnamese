@@ -1534,6 +1534,25 @@ class SeamlessM4Tv2ForSpeechToTextTrain_Pivot(SeamlessM4Tv2PreTrainedModel, Gene
             print(f"  - Same object? text_decoder.embed_tokens.weight is shared.weight: {self.text_decoder.embed_tokens.weight is self.shared.weight}")
             print(f"  - Same object? lm_head.weight is shared.weight: {self.lm_head.weight is self.shared.weight}")
 
+    def _safe_lm_head_forward(self, hidden_states):
+        """
+        Safely apply lm_head, handling FSDP weight flattening issues.
+        FSDP can flatten weights during sharding, so we need to reshape if necessary.
+        """
+        weight = self.lm_head.weight
+        bias = self.lm_head.bias
+        
+        # Check if weight has been flattened by FSDP
+        expected_shape = (self.config.vocab_size, self.config.hidden_size)
+        if weight.dim() == 1:
+            # Weight has been flattened, reshape it
+            print(f"[DEBUG] lm_head.weight is flattened ({weight.shape}), reshaping to {expected_shape}")
+            weight = weight.view(expected_shape)
+        
+        # Use F.linear directly with properly shaped weight
+        import torch.nn.functional as F
+        return F.linear(hidden_states, weight, bias)
+
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToText.forward
     def forward(
         self,
@@ -1625,10 +1644,9 @@ class SeamlessM4Tv2ForSpeechToTextTrain_Pivot(SeamlessM4Tv2PreTrainedModel, Gene
         else:
             print(f"[DEBUG] lm_head has no bias")
         
-        # ✅ Tính logits BÊN NGOÀI no_grad block để tránh FSDP issues
-        # Clone và detach để tạo tensor độc lập, không liên kết với gradient graph
+        # ✅ Use safe forward method to handle FSDP weight flattening
         try:
-            text_pivot_logits = self.lm_head(text_decoder_outputs)
+            text_pivot_logits = self._safe_lm_head_forward(text_decoder_outputs)
             print(f"[DEBUG] text_pivot_logits shape: {text_pivot_logits.shape}")
         except Exception as e:
             print(f"[ERROR] Failed to compute text_pivot_logits: {e}")
@@ -1639,7 +1657,7 @@ class SeamlessM4Tv2ForSpeechToTextTrain_Pivot(SeamlessM4Tv2PreTrainedModel, Gene
         del text_encoder_outputs, text_decoder_outputs
         
         print(f"[DEBUG] audio_decoder_outputs shape: {audio_decoder_outputs.shape}")
-        text_logits = self.lm_head(audio_decoder_outputs)
+        text_logits = self._safe_lm_head_forward(audio_decoder_outputs)
         print(f"[DEBUG] text_logits shape: {text_logits.shape}")
         
         # ✅ Giải phóng audio_decoder_outputs sau khi đã tính logits (giảm memory peak)

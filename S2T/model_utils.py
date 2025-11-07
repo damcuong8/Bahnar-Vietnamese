@@ -186,6 +186,24 @@ def wrap_model_with_fsdp(
         use_orig_params=True,
     )
     
+    # ✅ CRITICAL: Re-tie weights after FSDP wrapping
+    # FSDP can break weight tying during wrapping, so we must re-establish it
+    if hasattr(model, '_fsdp_wrapped_module'):
+        # Access the actual model inside FSDP wrapper
+        actual_model = model._fsdp_wrapped_module
+    else:
+        actual_model = model
+    
+    if hasattr(actual_model, '_tie_weights'):
+        logger.info("Re-tying weights after FSDP wrapping")
+        actual_model._tie_weights()
+        
+        # Verify weight tying worked correctly
+        if hasattr(actual_model, 'lm_head') and hasattr(actual_model, 'shared'):
+            logger.info(f"[POST-FSDP] lm_head.weight shape: {actual_model.lm_head.weight.shape}")
+            logger.info(f"[POST-FSDP] shared.weight shape: {actual_model.shared.weight.shape}")
+            logger.info(f"[POST-FSDP] Weights tied: {actual_model.lm_head.weight is actual_model.shared.weight}")
+    
     logger.info(f"✓ Model wrapped with FSDP")
     log_memory_stats("After FSDP wrap", rank=rank)
     print_memory_summary(rank=rank)
