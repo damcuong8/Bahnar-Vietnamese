@@ -1583,11 +1583,12 @@ class SeamlessM4Tv2ForSpeechToTextTrain_Pivot(SeamlessM4Tv2PreTrainedModel, Gene
                 encoder_attention_mask=text_pivot_attention_mask,
             )
 
-            text_pivot_logits = self.lm_head(text_decoder_outputs)
-            
-            # ✅ Giải phóng text encoder/decoder outputs sớm (no_grad block tự động giải phóng sau khi block kết thúc)
-            del text_encoder_outputs, text_decoder_outputs
+            # Compute logits and detach immediately to avoid FSDP issues
+            text_pivot_logits = self.lm_head(text_decoder_outputs).detach()
 
+        # ✅ Giải phóng sau khi ra khỏi no_grad block
+        del text_encoder_outputs, text_decoder_outputs
+        
         text_logits = self.lm_head(audio_decoder_outputs)
         
         # ✅ Giải phóng audio_decoder_outputs sau khi đã tính logits (giảm memory peak)
