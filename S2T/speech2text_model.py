@@ -621,6 +621,16 @@ class SeamlessM4Tv2SinusoidalPositionalEmbedding(nn.Module):
 
         self.register_buffer("weights", emb_weights, persistent=False)
 
+    def reset_parameters(self):
+        """Reset parameters - required by FSDP when using meta device."""
+        # Sinusoidal embeddings are deterministic, so we just recreate them
+        if hasattr(self, 'weights') and self.weights is not None:
+            num_embeddings = self.weights.size(0)
+        else:
+            # Default size during initialization
+            num_embeddings = 1024 + self.offset
+        self.make_weights(num_embeddings, self.embedding_dim, self.padding_idx)
+
     @staticmethod
     def get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
         """
@@ -1488,18 +1498,10 @@ class SeamlessM4Tv2ForSpeechToTextTrain_Pivot(SeamlessM4Tv2PreTrainedModel, Gene
 
         self.shared = nn.Embedding(config.vocab_size, config.hidden_size, config.pad_token_id)
         self.speech_encoder = SeamlessM4Tv2SpeechEncoder(config)
-        self.text_encoder = SeamlessM4Tv2Encoder(config, self.shared)  # Add text encoder for KD
+        self.text_encoder = SeamlessM4Tv2Encoder(config, self.shared)
         self.text_decoder = SeamlessM4Tv2Decoder(config, self.shared)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         
-        # ✅ DEBUG: Verify shapes after initialization
-        print(f"[DEBUG INIT] shared embedding shape: {self.shared.weight.shape}")
-        print(f"[DEBUG INIT] lm_head weight shape: {self.lm_head.weight.shape}")
-        print(f"[DEBUG INIT] lm_head bias: {self.lm_head.bias}")
-        print(f"[DEBUG INIT] config.vocab_size: {config.vocab_size}")
-        print(f"[DEBUG INIT] config.hidden_size: {config.hidden_size}")
-
-
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToText.get_encoder
     def get_encoder(self):
         return self.speech_encoder
@@ -1542,31 +1544,16 @@ class SeamlessM4Tv2ForSpeechToTextTrain_Pivot(SeamlessM4Tv2PreTrainedModel, Gene
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         """
         
-        # ✅ DEBUG: Verify lm_head state at start of forward
-        print(f"\n[DEBUG FORWARD START]")
-        print(f"  - lm_head.weight shape: {self.lm_head.weight.shape}")
-        print(f"  - lm_head.weight data_ptr: {self.lm_head.weight.data_ptr()}")
-        if hasattr(self.lm_head, 'bias') and self.lm_head.bias is not None:
-            print(f"  - lm_head.bias shape: {self.lm_head.bias.shape}")
-            print(f"  - lm_head.bias data_ptr: {self.lm_head.bias.data_ptr()}")
-        else:
-            print(f"  - lm_head.bias: None")
-        print(f"  - shared.weight shape: {self.shared.weight.shape}")
-        print(f"  - shared.weight data_ptr: {self.shared.weight.data_ptr()}")
-        print(f"  - lm_head.weight is shared.weight: {self.lm_head.weight is self.shared.weight}")
-        print(f"  - lm_head.weight.data_ptr() == shared.weight.data_ptr(): {self.lm_head.weight.data_ptr() == self.shared.weight.data_ptr()}")
-
         if decoder_input_ids is None:
             decoder_input_ids = shift_tokens_right(
                 labels, self.config.pad_token_id, self.config.decoder_start_token_id
             )
 
-        # ✅ Tắt output_hidden_states và output_attentions để tiết kiệm memory khi training
         audio_encoder_outputs = self.speech_encoder(
             input_features=audio_input_features,
             attention_mask=audio_attention_mask,
-            output_attentions=False,  # ✅ Không cần attention weights khi training
-            output_hidden_states=False,  # ✅ Không cần hidden states từ mọi layer
+            output_attentions=False,
+            output_hidden_states=False,
         )
 
         audio_encoder_attention_mask = audio_attention_mask
@@ -1584,13 +1571,8 @@ class SeamlessM4Tv2ForSpeechToTextTrain_Pivot(SeamlessM4Tv2PreTrainedModel, Gene
             encoder_hidden_states=audio_encoder_outputs,
             encoder_attention_mask=audio_encoder_attention_mask,
         )
-        
-        # ✅ Giải phóng audio_encoder_outputs sau khi decoder đã dùng (giảm memory peak)
-        # Lưu ý: audio_encoder_attention_mask vẫn cần dùng ở dưới, nhưng audio_encoder_outputs không cần nữa
-        del audio_encoder_outputs
 
         with torch.no_grad():
-            # ✅ Tắt output_hidden_states và output_attentions để tiết kiệm memory
             text_encoder_outputs = self.text_encoder(
                 input_ids=text_input_pivot_ids,
                 attention_mask=text_pivot_attention_mask,
@@ -1605,33 +1587,9 @@ class SeamlessM4Tv2ForSpeechToTextTrain_Pivot(SeamlessM4Tv2PreTrainedModel, Gene
                 encoder_attention_mask=text_pivot_attention_mask,
             )
 
-            # ✅ DEBUG: Kiểm tra shapes trước khi gọi lm_head
-            print(f"[DEBUG] text_decoder_outputs shape: {text_decoder_outputs.shape}")
-            print(f"[DEBUG] text_decoder_outputs dtype: {text_decoder_outputs.dtype}")
-            print(f"[DEBUG] lm_head weight shape: {self.lm_head.weight.shape}")
-            if hasattr(self.lm_head, 'bias') and self.lm_head.bias is not None:
-                print(f"[DEBUG] lm_head bias shape: {self.lm_head.bias.shape}")
-            else:
-                print(f"[DEBUG] lm_head has no bias")
+            text_pivot_logits = self.lm_head(text_decoder_outputs)
             
-            # ✅ Use safe forward method to handle FSDP weight flattening
-            try:
-                text_pivot_logits = self.lm_head(text_decoder_outputs)
-                print(f"[DEBUG] text_pivot_logits shape: {text_pivot_logits.shape}")
-            except Exception as e:
-                print(f"[ERROR] Failed to compute text_pivot_logits: {e}")
-                print(f"[DEBUG] text_decoder_outputs details: shape={text_decoder_outputs.shape}, stride={text_decoder_outputs.stride()}")
-                raise
-        
-        # ✅ Giải phóng sau khi đã tính logits
-        del text_encoder_outputs, text_decoder_outputs
-        
-        print(f"[DEBUG] audio_decoder_outputs shape: {audio_decoder_outputs.shape}")
-        text_logits = self._safe_lm_head_forward(audio_decoder_outputs)
-        print(f"[DEBUG] text_logits shape: {text_logits.shape}")
-        
-        # ✅ Giải phóng audio_decoder_outputs sau khi đã tính logits (giảm memory peak)
-        del audio_decoder_outputs
+        text_logits = self.lm_head(audio_decoder_outputs)
 
         kd_loss, n_valid_tokens = compute_token_kd_loss(text_pivot_logits, text_logits, labels)
 
