@@ -1600,21 +1600,21 @@ class SeamlessM4Tv2ForSpeechToTextTrain_Pivot(SeamlessM4Tv2PreTrainedModel, Gene
         # Lưu ý: audio_encoder_attention_mask vẫn cần dùng ở dưới, nhưng audio_encoder_outputs không cần nữa
         del audio_encoder_outputs
 
-        with torch.no_grad():
-            # ✅ Tắt output_hidden_states và output_attentions để tiết kiệm memory
-            text_encoder_outputs = self.text_encoder(
-                input_ids=text_input_pivot_ids,
-                attention_mask=text_pivot_attention_mask,
-                output_attentions=False,
-                output_hidden_states=False,
-            )
-        
-            # decoder for text
-            text_decoder_outputs = self.text_decoder(
-                input_ids=decoder_input_ids,
-                encoder_hidden_states=text_encoder_outputs,
-                encoder_attention_mask=text_pivot_attention_mask,
-            )
+    
+        # ✅ Tắt output_hidden_states và output_attentions để tiết kiệm memory
+        text_encoder_outputs = self.text_encoder(
+            input_ids=text_input_pivot_ids,
+            attention_mask=text_pivot_attention_mask,
+            output_attentions=False,
+            output_hidden_states=False,
+        )
+    
+        # decoder for text
+        text_decoder_outputs = self.text_decoder(
+            input_ids=decoder_input_ids,
+            encoder_hidden_states=text_encoder_outputs,
+            encoder_attention_mask=text_pivot_attention_mask,
+        )
 
         # ✅ DEBUG: Kiểm tra shapes trước khi gọi lm_head
         print(f"[DEBUG] text_decoder_outputs shape: {text_decoder_outputs.shape}")
@@ -1628,7 +1628,7 @@ class SeamlessM4Tv2ForSpeechToTextTrain_Pivot(SeamlessM4Tv2PreTrainedModel, Gene
         # ✅ Tính logits BÊN NGOÀI no_grad block để tránh FSDP issues
         # Clone và detach để tạo tensor độc lập, không liên kết với gradient graph
         try:
-            text_pivot_logits = self.lm_head(text_decoder_outputs).clone().detach()
+            text_pivot_logits = self.lm_head(text_decoder_outputs)
             print(f"[DEBUG] text_pivot_logits shape: {text_pivot_logits.shape}")
         except Exception as e:
             print(f"[ERROR] Failed to compute text_pivot_logits: {e}")
